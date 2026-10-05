@@ -33,7 +33,7 @@ const static char* FragmentShaderSource =
     "in vec4 ModulateColor;\n"
     "uniform float DrawingDepth;\n"
     "uniform sampler2D AtlasTexture;\n"
-    "layout (binding = " STRINGIFY(SSBO_BINDING) ", std430) buffer TextureDimensionsBuffer\n" //format: x - x, y - y, z - width, w - height
+    "layout (binding = " STRINGIFY(TCG_SSBO_BINDING) ", std430) buffer TextureDimensionsBuffer\n" //format: x - x, y - y, z - width, w - height
     "{\n"
     "    uvec4 TextureDimensions[];\n"
     "};\n"

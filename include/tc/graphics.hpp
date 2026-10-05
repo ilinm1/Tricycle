@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tc/graphics/context.hpp"
+#include "tc/graphics/graphics.hpp"
 #include "tc/graphics/input_events.hpp"
 #include "tc/graphics/layer.hpp"
 #include "tc/graphics/widgets.hpp"

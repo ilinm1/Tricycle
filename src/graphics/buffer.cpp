@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "glad/glad.h"
+#include <glad/glad.h>
 #include "tc/graphics/buffer.hpp"
 
 namespace Tcg = Tc::Graphics;
@@ -24,7 +24,7 @@ void Tcg::Buffer::Initialize(
     glBufferData(binding, size, nullptr, Usage);
 }
 
-size_t Tcg::Buffer::AddBlock(unsigned int size)
+unsigned int Tcg::Buffer::AddBlock(unsigned int size)
 {
     BufferBlock block;
     if (Blocks.empty())
@@ -42,7 +42,7 @@ size_t Tcg::Buffer::AddBlock(unsigned int size)
     return Blocks.size() - 1;
 }
 
-void Tcg::Buffer::ResizeBlock(size_t index, unsigned int size)
+void Tcg::Buffer::ResizeBlock(unsigned int index, unsigned int size)
 {
     BufferBlock& block = Blocks[index];
 
@@ -68,7 +68,7 @@ void Tcg::Buffer::ResizeBlock(size_t index, unsigned int size)
     block.Size = size;
 }
 
-void Tcg::Buffer::RemoveBlock(size_t index)
+void Tcg::Buffer::RemoveBlock(unsigned int index)
 {
     ResizeBlock(index, 0);
     Blocks.erase(Blocks.begin() + index);

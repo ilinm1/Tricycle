@@ -19,7 +19,7 @@ namespace Tc::Graphics
     struct Texture
     {
         std::filesystem::path Path;
-        size_t Index = 0; //index in 'Textures' and 'TextureDimensionsVector'; if index is zero then texture is invalid
+        unsigned int Index = 0; //index in 'Textures' and 'TextureDimensionsVector'; if index is zero then texture is invalid
 
         bool IsValid()
         {
@@ -33,8 +33,8 @@ namespace Tc::Graphics
         unsigned int MaxWidth; //in pixels
         unsigned int MaxHeight;
 
-        size_t GlyphCount = 0;
-        std::vector<std::tuple<unsigned int, unsigned int, size_t>> EncodingRanges; //first utf32 codepoint, second codepoint, first glyph index (to avoid having a glyph for every utf codepoint)
+        unsigned int GlyphCount = 0;
+        std::vector<std::tuple<unsigned int, unsigned int, unsigned int>> EncodingRanges; //first utf32 codepoint, second codepoint, first glyph index (to avoid having a glyph for every utf codepoint)
 
         bool IsValid()
         {

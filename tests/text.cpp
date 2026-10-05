@@ -1,3 +1,5 @@
+//testing camera movement, text rendering, keyboard input
+
 #include <codecvt>
 #include "tc/graphics.hpp"
 

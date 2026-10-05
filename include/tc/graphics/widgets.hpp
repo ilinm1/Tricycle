@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tc/misc/events.hpp"
-#include "context.hpp"
+#include "graphics.hpp"
 #include "input_events.hpp"
 #include "layer.hpp"
 
@@ -27,7 +27,7 @@ namespace Tc::Graphics::Widgets
     {
         std::vector<Widget*> Widgets;
 
-        WidgetLayer(bool isWorldSpace = false, unsigned int primitiveType = GL_TRIANGLES, unsigned int drawingHeight = HEIGHT_MIN, size_t renderingDataSize = 256);
+        WidgetLayer(bool isWorldSpace = false, unsigned int primitiveType = GL_TRIANGLES, unsigned int drawingHeight = TCG_HEIGHT_MIN, size_t renderingDataSize = 256);
 
         void AddWidget(Widget* widgetPtr);
         void RemoveWidget(Widget* widgetPtr);

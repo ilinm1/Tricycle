@@ -1,3 +1,5 @@
+//testing drawing, layer transparency, texture loading, sound playback
+
 #include <format>
 #include <random>
 #include "tc/graphics.hpp"
@@ -42,7 +44,7 @@ struct BallLayer : Tcg::Layer
     const float BallSpeed = 1.0f;
     const float TimeStep = 0.1f;
     
-    BallLayer() : Tcg::Layer(true, GL_TRIANGLES, HEIGHT_MAX), Texture(Tcg::ResolveTexture("test.png"))
+    BallLayer() : Tcg::Layer(true, GL_TRIANGLES, TCG_HEIGHT_MAX), Texture(Tcg::ResolveTexture("test.png"))
     {
         std::default_random_engine engine;
         engine.seed(std::time(nullptr));

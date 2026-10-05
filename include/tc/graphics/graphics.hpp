@@ -7,10 +7,10 @@
 #include "rectangle_packer.hpp"
 #include "texture.hpp"
 
-#define IMAGE_CHANNELS 4 //rgba, just to avoid magic numbers
-#define BUFFER_SIZE (VERT_SIZE * 3 * 1000000) //68.6 Mbs, up to a million triangles
-#define IMAGE_EXTS { ".png", ".jpeg", ".bmp" }
-#define SSBO_BINDING 1
+#define TCG_IMAGE_CHANNELS 4 //rgba, just to avoid magic numbers
+#define TCG_BUFFER_SIZE (TCG_VERT_SIZE * 3 * 1000000) //68.6 Mbs, up to a million triangles
+#define TCG_IMAGE_EXTS { ".png", ".jpeg", ".bmp" }
+#define TCG_SSBO_BINDING 1
 
 namespace Tc::Graphics
 {

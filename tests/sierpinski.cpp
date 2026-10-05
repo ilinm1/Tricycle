@@ -1,3 +1,5 @@
+//testing drawing a lot of triangles
+
 #include <chrono>
 #include <thread>
 #include <iostream>

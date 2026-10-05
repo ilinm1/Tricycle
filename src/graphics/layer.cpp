@@ -1,4 +1,4 @@
-#include "tc/graphics/context.hpp"
+#include "tc/graphics/graphics.hpp"
 #include "tc/graphics/layer.hpp"
 
 namespace Tcg = Tc::Graphics;
@@ -7,7 +7,7 @@ Tcg::Layer::Layer(
     bool isWorldSpace,
     unsigned int primitiveType,
     unsigned int drawingHeight,
-    size_t renderingDataSize) :
+    unsigned int renderingDataSize) :
     IsWorldSpace(isWorldSpace),
     PrimitiveType(primitiveType),
     DrawingHeight(drawingHeight),
@@ -25,13 +25,13 @@ Tcg::Layer::~Layer()
 
 //writes 'count' vertices to the buffer 'buf' of size 'size'
 //null can be passed to 'texCoords' and 'colors' parameters to omit them
-void Tcg::Layer::WriteVertexData(const Vec2* coords, const Vec2* texCoords, const Color* colors, Texture texture, size_t count)
+void Tcg::Layer::WriteVertexData(const Vec2* coords, const Vec2* texCoords, const Color* colors, Texture texture, unsigned int count)
 {
-    if (RenderingDataSize - RenderingDataUsed < count * VERT_SIZE)
+    if (RenderingDataSize - RenderingDataUsed < count * TCG_VERT_SIZE)
     {
         char* oldData = RenderingData;
         size_t oldSize = RenderingDataSize;
-        RenderingDataSize = RenderingDataSize * 2 + count * VERT_SIZE;
+        RenderingDataSize = RenderingDataSize * 2 + count * TCG_VERT_SIZE;
         RenderingData = new char[RenderingDataSize];
         std::memcpy(RenderingData, oldData, oldSize);
         delete[] oldData;
@@ -41,21 +41,21 @@ void Tcg::Layer::WriteVertexData(const Vec2* coords, const Vec2* texCoords, cons
     for (int i = 0; i < count; i++)
     {
         //vertex coordinates - xy
-        *reinterpret_cast<float*>(data + VERT_SIZE * i) = coords[i].X;
-        *reinterpret_cast<float*>(data + VERT_SIZE * i + 1 * sizeof(float)) = coords[i].Y;
+        *reinterpret_cast<float*>(data + TCG_VERT_SIZE * i) = coords[i].X;
+        *reinterpret_cast<float*>(data + TCG_VERT_SIZE * i + 1 * sizeof(float)) = coords[i].Y;
 
         //texture coordinates - xy
-        *reinterpret_cast<float*>(data + VERT_SIZE * i + 2 * sizeof(float)) = texCoords == nullptr ? 0 : texCoords[i].X;
-        *reinterpret_cast<float*>(data + VERT_SIZE * i + 3 * sizeof(float)) = texCoords == nullptr ? 0 : texCoords[i].Y;
+        *reinterpret_cast<float*>(data + TCG_VERT_SIZE * i + 2 * sizeof(float)) = texCoords == nullptr ? 0 : texCoords[i].X;
+        *reinterpret_cast<float*>(data + TCG_VERT_SIZE * i + 3 * sizeof(float)) = texCoords == nullptr ? 0 : texCoords[i].Y;
 
         //texture index
-        *reinterpret_cast<unsigned int*>(data + VERT_SIZE * i + 4 * sizeof(float)) = texture.Index;
+        *reinterpret_cast<unsigned int*>(data + TCG_VERT_SIZE * i + 4 * sizeof(float)) = texture.Index;
 
         //modulate color
-        *reinterpret_cast<unsigned int*>(data + VERT_SIZE * i + 4 * sizeof(float) + sizeof(unsigned int)) = colors == nullptr ? 0 : colors[i].Uint;
+        *reinterpret_cast<unsigned int*>(data + TCG_VERT_SIZE * i + 4 * sizeof(float) + sizeof(unsigned int)) = colors == nullptr ? 0 : colors[i].Uint;
     }
 
-    RenderingDataUsed += count * VERT_SIZE;
+    RenderingDataUsed += count * TCG_VERT_SIZE;
 }
 
 //draws a triangle from three points in world/screen space (depending on layer's space) with the specified texture

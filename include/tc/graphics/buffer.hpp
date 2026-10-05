@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include "glad/glad.h"
+#include <glad/glad.h>
 
 //'BufferBlock' and 'Buffer' classes
 
@@ -28,8 +28,8 @@ namespace Tc::Graphics
         std::vector<BufferBlock> Blocks;
 
         void Initialize(unsigned int name, unsigned int copyName, unsigned int size, unsigned int usage, unsigned int binding);
-        size_t AddBlock(unsigned int size = 0);
-        void ResizeBlock(size_t index, unsigned int size);
-        void RemoveBlock(size_t index);
+        unsigned int AddBlock(unsigned int size = 0);
+        void ResizeBlock(unsigned int index, unsigned int size);
+        void RemoveBlock(unsigned int index);
     };
 }

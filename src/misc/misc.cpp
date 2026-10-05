@@ -4,7 +4,7 @@
 
 void Tc::Log(std::string msg)
 {
-#ifdef DEBUG_OUTPUT
-    std::cout << msg;
+#ifdef TC_DEBUG_OUTPUT
+    std::cout << msg << std::endl;
 #endif
 }

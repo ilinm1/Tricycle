@@ -5,19 +5,19 @@
 #include <format>
 #include <algorithm>
 #include <vector>
-#include "glad/glad.h"
-#include "GLFW/glfw3.h"
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #define STBI_FAILURE_USERMSG
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image.h"
-#include "stb_image_write.h"
+#include <stb_image.h>
+#include <stb_image_write.h>
 #include "tc/misc/events.hpp"
 #include "tc/misc/mat3.hpp"
 #include "tc/misc/misc.hpp"
 #include "tc/misc/vec2.hpp"
 #include "tc/graphics/buffer.hpp"
-#include "tc/graphics/context.hpp"
+#include "tc/graphics/graphics.hpp"
 #include "tc/graphics/input_events.hpp"
 #include "tc/graphics/layer.hpp"
 #include "tc/graphics/shaders.hpp"
@@ -26,10 +26,9 @@ namespace Tcg = Tc::Graphics;
 
 //callbacks
 
-#ifdef DEBUG_OUTPUT
 void GlfwErrorCallback(int code, const char* desc)
 {
-    Tc::Log(std::format("GLFW error {} - '{}'\n", code, desc));
+    Tc::Log(std::format("GLFW error {} - '{}'", code, desc));
 }
 
 void GLAPIENTRY GlMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* param)
@@ -54,9 +53,8 @@ void GLAPIENTRY GlMessageCallback(GLenum source, GLenum type, GLuint id, GLenum 
         break;
     }
 
-    Tc::Log(std::format("GL debug - {}: '{}'\n", severityStr, message));
+    Tc::Log(std::format("GL debug - {}: '{}'", severityStr, message));
 }
-#endif
 
 void GlfwFramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
@@ -171,12 +169,12 @@ void Tcg::AddLayer(Tcg::Layer* layerPtr)
     layerPtr->BlockIndex = Vbo.AddBlock();
     Layers.push_back(layerPtr);
     SortLayersByHeight();
-    Log(std::format("Added layer no. {}.\n", layerPtr->Id));
+    Log(std::format("Added layer no. {}.", layerPtr->Id));
 }
 
 void Tcg::RemoveLayer(Tcg::Layer* layerPtr)
 {
-    Log(std::format("Removing layer no. {}.\n", layerPtr->Id));
+    Log(std::format("Removing layer no. {}.", layerPtr->Id));
 
     Vbo.RemoveBlock(layerPtr->BlockIndex);
     for (Tcg::Layer* layer : Layers)
@@ -275,14 +273,14 @@ void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, 
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, resizable);
 
-#ifdef DEBUG_OUTPUT
+#ifdef TC_DEBUG_OUTPUT
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
     glfwSetErrorCallback(GlfwErrorCallback);
 #endif
 
     Window = glfwCreateWindow(windowWidth, windowHeight, windowName.c_str(), fullscreen ? glfwGetPrimaryMonitor() : nullptr, nullptr);
     if (Window == nullptr)
-        throw std::runtime_error("Failed to create GLFW window.");
+        throw std::runtime_error("Failed to create a GLFW window.");
     glfwMakeContextCurrent(Window);
 
     //setting callbacks
@@ -295,12 +293,10 @@ void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
         throw std::runtime_error("Failed to initialize GLAD.");
 
-    //gl debug
-#ifdef DEBUG_OUTPUT
-    Log(std::format("OpenGL version: {}\n", std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION)))));
+#ifdef TC_DEBUG_OUTPUT
+    Log(std::format("OpenGL version: {}", std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION)))));
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
     glDebugMessageCallbackARB(GlMessageCallback, 0);
-    Log("Using OpenGL debug output.\n");
 #endif
 
     glViewport(0, 0, windowWidth, windowHeight);
@@ -316,25 +312,25 @@ void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, 
     glGenVertexArrays(1, &Vao);
     glBindVertexArray(Vao);
 
-    VboCopy.Initialize(0, 0, BUFFER_SIZE, GL_DYNAMIC_COPY, GL_COPY_WRITE_BUFFER);
-    Vbo.Initialize(0, VboCopy.Name, BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_ARRAY_BUFFER);
-    Ssbo.Initialize(0, 0, BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_SHADER_STORAGE_BUFFER);
+    VboCopy.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_COPY, GL_COPY_WRITE_BUFFER);
+    Vbo.Initialize(0, VboCopy.Name, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_ARRAY_BUFFER);
+    Ssbo.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_SHADER_STORAGE_BUFFER);
 
     //vertex attributes, interleaved
     //coords - 2 floats
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, VERT_SIZE, 0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, 0);
     glEnableVertexAttribArray(0);
 
     //texture coords - 2 floats
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, VERT_SIZE, reinterpret_cast<void*>(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, reinterpret_cast<void*>(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     //texture index - 1 uint
-    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float)));
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
     //modulate color - 1 uint
-    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float) + sizeof(unsigned int)));
+    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float) + sizeof(unsigned int)));
     glEnableVertexAttribArray(3);
 
     //!! shader compilation !!
@@ -383,7 +379,7 @@ void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, 
     UniformNdcMatrix = glGetUniformLocation(shaders, "NDCMatrix");
 
     //binding ssbo
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, Ssbo.Name);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TCG_SSBO_BINDING, Ssbo.Name);
 
     //enable blending
     glEnable(GL_BLEND);
@@ -411,7 +407,7 @@ void Tcg::UpdateLoop()
             {
                 if (!layer->IsOutOfView)
                 {
-                    Log(std::format("Layer no. {} is out of view and won't be drawn.\n", layer->Id));
+                    Log(std::format("Layer no. {} is out of view and won't be drawn.", layer->Id));
                     layer->IsOutOfView = true;
                 }
 
@@ -425,8 +421,8 @@ void Tcg::UpdateLoop()
             {
                 if (dataSize > layerBlock.Size)
                 {
-                    Log(std::format("Layer no. {} has exceeded it's memory limit, expanding from {} to {} bytes.\n", layer->Id, layerBlock.Size, dataSize * 2));
-                    Vbo.ResizeBlock(layer->BlockIndex, layerBlock.Size * 2 + dataSize);
+                    Log(std::format("Layer no. {} has exceeded it's GPU memory limit, expanding from {} to {} bytes.", layer->Id, layerBlock.Size, dataSize * 2));
+                    Vbo.ResizeBlock(layer->BlockIndex, dataSize * 2);
                 }
 
                 layerBlock.Used = dataSize;
@@ -448,12 +444,14 @@ void Tcg::UpdateLoop()
             }
 
             //draw call
-            glDrawArrays(layer->PrimitiveType, layerBlock.Offset / VERT_SIZE, layerBlock.Used / VERT_SIZE);
+            glDrawArrays(layer->PrimitiveType, layerBlock.Offset / TCG_VERT_SIZE, layerBlock.Used / TCG_VERT_SIZE);
         }
 
         glfwSwapBuffers(Window);
         glfwPollEvents();
     }
+
+    glfwTerminate();
 }
 
 
@@ -587,7 +585,7 @@ Tcg::Texture AddTexture(std::filesystem::path path, Tcg::Rect rect)
 {
     Tcg::TextureDimensionsVector.push_back({ rect.X, rect.Y, rect.Width, rect.Height });
     Tcg::TexturesToUpdate.push_back(Tcg::Textures.size());
-    Tcg::Textures.push_back({ path, Tcg::Textures.size() });
+    Tcg::Textures.push_back({ path, static_cast<unsigned int>(Tcg::Textures.size()) });
     return Tcg::Textures.back();
 }
 
@@ -627,9 +625,9 @@ void WriteToAtlas(unsigned char* data, unsigned int x, unsigned int y, unsigned 
     {
         unsigned int dataRow = flip ? height - i - 1 : i;
         std::memcpy(
-            Tcg::AtlasData + (Tcg::AtlasWidth * (i + y) + x) * IMAGE_CHANNELS,
-            data + width * dataRow * IMAGE_CHANNELS,
-            width * IMAGE_CHANNELS);
+            Tcg::AtlasData + (Tcg::AtlasWidth * (i + y) + x) * TCG_IMAGE_CHANNELS,
+            data + width * dataRow * TCG_IMAGE_CHANNELS,
+            width * TCG_IMAGE_CHANNELS);
     }
 }
 
@@ -638,7 +636,7 @@ void ResizeAtlas(unsigned int width, unsigned int height)
     if (Tcg::AtlasWidth == width && Tcg::AtlasHeight == height)
         return;
 
-    unsigned char* data = new unsigned char[width * height * IMAGE_CHANNELS];
+    unsigned char* data = new unsigned char[width * height * TCG_IMAGE_CHANNELS];
 
     unsigned char* oldData = Tcg::AtlasData;
     unsigned int oldWidth = Tcg::AtlasWidth;
@@ -686,9 +684,9 @@ std::vector<Tcg::Texture> Tcg::LoadTextures(std::vector<std::filesystem::path> p
         std::filesystem::path path = paths[get<0>(rect.Data)];
 
         int _;
-        unsigned char* data = stbi_load(path.string().c_str(), &_, &_, &_, IMAGE_CHANNELS);
+        unsigned char* data = stbi_load(path.string().c_str(), &_, &_, &_, TCG_IMAGE_CHANNELS);
         if (data == nullptr)
-            throw std::runtime_error(std::format("STBI error: '{}'.", stbi_failure_reason()));
+            throw std::runtime_error(std::format("stb_image couldn't load the file: '{}'.", stbi_failure_reason()));
 
         WriteToAtlas(data, rect.X, rect.Y, rect.Width, rect.Height);
         delete[] data;
@@ -798,7 +796,7 @@ Tcg::BitmapFont& Tcg::LoadBdfFont(std::filesystem::path path)
 
         file.seekg(get<1>(rect.Data)); //going to the start of the bitmap
 
-        unsigned char buffer[IMAGE_CHANNELS * 4]; //4 cause we're writing up to 4 pixels per hexadecimal digit
+        unsigned char buffer[TCG_IMAGE_CHANNELS * 4]; //4 cause we're writing up to 4 pixels per hexadecimal digit
 
         for (int y = rect.Height; y > 0; y--)
         {
@@ -817,7 +815,7 @@ Tcg::BitmapFont& Tcg::LoadBdfFont(std::filesystem::path path)
 
                 for (int i = 0; i < pixels; i++)
                 {
-                    *reinterpret_cast<unsigned int*>(buffer + i * IMAGE_CHANNELS) = value & (0b1000 >> i) ? 0xFFFFFFFF : 0;
+                    *reinterpret_cast<unsigned int*>(buffer + i * TCG_IMAGE_CHANNELS) = value & (0b1000 >> i) ? 0xFFFFFFFF : 0;
                 }
 
                 if (pixels != 0)
@@ -848,7 +846,7 @@ std::vector<Tcg::Texture> Tcg::LoadTexturesFromPath(std::filesystem::path path)
     for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(path))
     {
         std::string ext = entry.path().extension().string();
-        for (std::string imageExt : IMAGE_EXTS)
+        for (std::string imageExt : TCG_IMAGE_EXTS)
         {
             if (ext == imageExt)
                 paths.push_back(entry.path());
