@@ -106,5 +106,7 @@ int main()
     Tcg::AddLayer(&textLayer);
 
     Tcg::UpdateLoop();
+    Tcg::Shutdown();
+
     return 0;
 }

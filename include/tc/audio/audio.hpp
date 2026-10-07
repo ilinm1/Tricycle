@@ -6,6 +6,7 @@
 #include "stream.hpp"
 
 #define TCA_DEFAULT_SAMPLE_RATE 44100
+#define TCA_STREAM_READ_TIMEOUT 8
 
 namespace Tc::Audio
 {
@@ -13,9 +14,11 @@ namespace Tc::Audio
 
 	//file methods
 
-	AudioFile LoadFile(std::filesystem::path path, bool loadAll);
+	AudioFile LoadFile(std::filesystem::path path, bool loadAll = true);
 	void PlayFile(AudioFile* filePtr);
-	void StopFile(AudioFile* filePtr);
+	void SeekFile(AudioFile* filePtr, unsigned int sample);
+	void SeekFileSeconds(AudioFile* filePtr, float seconds);
+	void StopFile(AudioFile* filePtr, bool close = true);
 	void SetVolume(AudioFile* filePtr, float volume);
 	void SetVolume(AudioFile* filePtr, float left, float right);
 	void SetSpeed(AudioFile* filePtr, float speed);
@@ -29,18 +32,19 @@ namespace Tc::Audio
 	void SetVolume(Stream* streamPtr, float volume);
 	void SetSpeed(Stream* streamPtr, float speed);
 
-	//init, update
+	//init, update, shutdown
 
 	void Initialize(bool stereo = true, bool input = false, unsigned int sampleRate = TCA_DEFAULT_SAMPLE_RATE);
 	void UpdateLoop();
+	void Shutdown();
 
 	//globals
 
-	const std::unordered_map<std::string, AudioFileFormat> AudioFileFormats = { { ".ogg", AudioFileFormat::Ogg } };
+	inline const std::unordered_map<std::string, AudioFileFormat> AudioFileFormats = { { ".ogg", AudioFileFormat::Ogg } };
 
-	inline std::vector<Stream*> LeftChannelStreams;
+	inline std::vector<Stream*> LeftChannelStreams; //if output is mono then this will be the only available channel
 	inline std::vector<Stream*> RightChannelStreams;
-	inline std::vector<AudioFile*> AudioFiles;
+	inline std::vector<AudioFile*> AudioFiles; //all currently played files
 
 	inline PaStream* IoStreamPtr;
 	inline unsigned int IoSampleRate;

@@ -117,8 +117,12 @@ struct CalculatorLayer : Tcg::Widgets::WidgetLayer
 int main()
 {
 	Tcg::Initialize(300, 300, "Calculator", false, false);
+
 	CalculatorLayer layer;
 	Tcg::AddLayer(&layer);
+
 	Tcg::UpdateLoop();
+	Tcg::Shutdown();
+
 	return 0;
 }

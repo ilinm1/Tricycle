@@ -2,24 +2,11 @@
 #include <string>
 #include <codecvt>
 #include <chrono>
+#include "tc/misc/misc.hpp"
 #include "tc/misc/vec2.hpp"
 #include "tc/graphics/widgets.hpp"
 
 namespace Tcw = Tc::Graphics::Widgets;
-
-//utility methods
-
-bool IsPointInBox(Tc::Vec2 point, Tc::Vec2 lb, Tc::Vec2 rt)
-{
-    return point.X > lb.X && point.X < rt.X && point.Y > lb.Y && point.Y < rt.Y;
-}
-
-float Clamp(float v, float min, float max)
-{
-    v = v < min ? min : v;
-    v = v > max ? max : v;
-    return v;
-}
 
 //widget
 
@@ -129,7 +116,7 @@ bool Tcw::Button::OnMousePress(MousePressEvent& ev, void* data)
 
     Vec2 mousePos = PointFromPixels(GetCursorPos(), widget->Parent->IsWorldSpace);
     widget->Pressed = false;
-    if (ev.Action == GLFW_PRESS && IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
+    if (ev.Action == GLFW_PRESS && Tc::IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
         widget->Pressed = widget->Handler(ev, data);
 
     widget->BaseColor = widget->Pressed ? widget->PressedColor : widget->DefaultColor;
@@ -229,7 +216,7 @@ bool Tcw::InputField::OnMousePress(MousePressEvent& ev, void* data)
         return false;
 
     Vec2 mousePos = PointFromPixels(GetCursorPos(), widget->Parent->IsWorldSpace);
-    if (IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
+    if (Tc::IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
     {
         widget->InFocus = true;
         widget->CursorPosition = widget->GetIndex(mousePos);
@@ -353,7 +340,7 @@ Tc::Vec2 Tcw::Slider::GetSliderBasePosition()
 
 Tc::Vec2 Tcw::Slider::ValueToPosition(float value)
 {
-    value = Clamp(value, MinValue, MaxValue);
+    value = Tc::Clamp(value, MinValue, MaxValue);
     value = std::floor(value / Step) * Step;
     return GetSliderBasePosition() + Vec2(Dimensions.X - SliderWidth, 0) * ((value - MinValue) / (MaxValue - MinValue));
 }
@@ -362,7 +349,7 @@ float Tcw::Slider::PositionToValue(Vec2 pos)
 {
     float value = ((pos - Position).X / (Dimensions.X - SliderWidth)) * (MaxValue - MinValue) + MinValue;
     value = std::floor(value / Step) * Step;
-    return Clamp(value, MinValue, MaxValue);
+    return Tc::Clamp(value, MinValue, MaxValue);
 }
 
 bool Tcw::Slider::OnMousePress(MousePressEvent& ev, void* data)
@@ -372,7 +359,7 @@ bool Tcw::Slider::OnMousePress(MousePressEvent& ev, void* data)
         return false;
 
     Vec2 mousePos = PointFromPixels(GetCursorPos(), widget->Parent->IsWorldSpace);
-    widget->Dragging = IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions) && ev.Action == GLFW_PRESS;
+    widget->Dragging = Tc::IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions) && ev.Action == GLFW_PRESS;
     return false;
 }
 
@@ -383,8 +370,8 @@ bool Tcw::Slider::OnScroll(ScrollEvent& ev, void* data)
         return false;
 
     Vec2 mousePos = PointFromPixels(GetCursorPos(), widget->Parent->IsWorldSpace);
-    if (IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
-        widget->Value = Clamp(widget->Value + widget->Step * (ev.OffsetY > 0 ? 1.0f : -1.0f), widget->MinValue, widget->MaxValue);
+    if (Tc::IsPointInBox(mousePos, widget->Position, widget->Position + widget->Dimensions))
+        widget->Value = Tc::Clamp(widget->Value + widget->Step * (ev.OffsetY > 0 ? 1.0f : -1.0f), widget->MinValue, widget->MaxValue);
 
     return false;
 }

@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#define PI 3.141592
+
 namespace Tc
 {
     struct Vec2
@@ -31,6 +33,15 @@ namespace Tc
         static Vec2 FromAngle(float angle)
         {
             return Vec2(cosf(angle), sinf(angle));
+        }
+
+        float ToAngle()
+        {
+            if (X == 0.0f)
+                return Y > 0.0f ? PI / 2.0f : PI / -2.0f;
+
+            float v = atanf(Y / X);
+            return Y > 0.0f ? v : v + PI;
         }
 
         Vec2 Round()

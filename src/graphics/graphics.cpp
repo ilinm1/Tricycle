@@ -118,6 +118,8 @@ void Tcg::SetWindowFullscreen(bool fullscreen)
 
 //input methods
 
+//returns vector containg cursor position IN PIXELS
+//to get cursor position in NDC/in-world coordinates use 'PointFromPixels'
 Tc::Vec2 Tcg::GetCursorPos()
 {
     double cx, cy;
@@ -260,200 +262,6 @@ std::filesystem::path OpenFilePicker(std::string title, bool write, std::filesys
     throw std::runtime_error("Not implemented for your OS.");
 }
 #endif
-
-//init, update
-
-void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, bool fullscreen, bool resizable)
-{
-    //!! window creation !!
-
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, resizable);
-
-#ifdef TC_DEBUG_OUTPUT
-    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
-    glfwSetErrorCallback(GlfwErrorCallback);
-#endif
-
-    Window = glfwCreateWindow(windowWidth, windowHeight, windowName.c_str(), fullscreen ? glfwGetPrimaryMonitor() : nullptr, nullptr);
-    if (Window == nullptr)
-        throw std::runtime_error("Failed to create a GLFW window.");
-    glfwMakeContextCurrent(Window);
-
-    //setting callbacks
-    glfwSetFramebufferSizeCallback(Window, GlfwFramebufferSizeCallback);
-    glfwSetKeyCallback(Window, GlfwKeyCallback);
-    glfwSetCharCallback(Window, GlfwCharCallback);
-    glfwSetMouseButtonCallback(Window, GlfwMouseButtonCallback);
-    glfwSetScrollCallback(Window, GlfwScrollCallback);
-
-    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
-        throw std::runtime_error("Failed to initialize GLAD.");
-
-#ifdef TC_DEBUG_OUTPUT
-    Log(std::format("OpenGL version: {}", std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION)))));
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
-    glDebugMessageCallbackARB(GlMessageCallback, 0);
-#endif
-
-    glViewport(0, 0, windowWidth, windowHeight);
-    glClearColor(0, 0, 0, 1);
-
-    UpdateWorldToNDCMatrix();
-    UpdateNDCToPixelMatrix(windowWidth, windowHeight);
-
-    //!! buffer generation !!
-    //VAO is vertex array object, it holds vertex attributes and a VBO
-    //VBO is vertex buffer object, it holds vertex data (each layer has it's own block of memory inside of it)
-
-    glGenVertexArrays(1, &Vao);
-    glBindVertexArray(Vao);
-
-    VboCopy.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_COPY, GL_COPY_WRITE_BUFFER);
-    Vbo.Initialize(0, VboCopy.Name, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_ARRAY_BUFFER);
-    Ssbo.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_SHADER_STORAGE_BUFFER);
-
-    //vertex attributes, interleaved
-    //coords - 2 floats
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, 0);
-    glEnableVertexAttribArray(0);
-
-    //texture coords - 2 floats
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, reinterpret_cast<void*>(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    //texture index - 1 uint
-    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    //modulate color - 1 uint
-    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float) + sizeof(unsigned int)));
-    glEnableVertexAttribArray(3);
-
-    //!! shader compilation !!
-
-    unsigned int vertShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertShader, 1, &VertexShaderSource, nullptr);
-    glCompileShader(vertShader);
-
-    int success;
-    char msg[256];
-    glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertShader, 256, nullptr, msg);
-        throw std::runtime_error(std::format("Error while compiling the vertex shader: '{}'.", msg));
-    }
-
-    unsigned int fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &FragmentShaderSource, nullptr);
-    glCompileShader(fragShader);
-
-    glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragShader, 256, nullptr, msg);
-        throw std::runtime_error(std::format("Error while compiling the fragment shader: '{}'.", msg));
-    }
-
-    unsigned int shaders;
-    shaders = glCreateProgram();
-    glAttachShader(shaders, vertShader);
-    glAttachShader(shaders, fragShader);
-    glLinkProgram(shaders);
-
-    glGetProgramiv(shaders, GL_LINK_STATUS, &success);
-    if (!success)
-    {
-        glGetProgramInfoLog(shaders, 256, nullptr, msg);
-        throw std::runtime_error(std::format("Error while linking shaders: '{}'.", msg));
-    }
-    glDeleteShader(vertShader);
-    glDeleteShader(fragShader);
-    glUseProgram(shaders);
-
-    //shader uniform values
-    UniformNdcMatrix = glGetUniformLocation(shaders, "NDCMatrix");
-
-    //binding ssbo
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TCG_SSBO_BINDING, Ssbo.Name);
-
-    //enable blending
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    //querying max texture size
-    int maxTexSize;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexSize);
-    AtlasPacker.MaxWidth = AtlasPacker.MaxHeight = maxTexSize / 2;
-}
-
-void Tcg::UpdateLoop()
-{
-    while (!glfwWindowShouldClose(Window))
-    {
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        for (Tcg::Layer* layer : Layers)
-        {
-            Tcg::BufferBlock& layerBlock = Vbo.Blocks[layer->BlockIndex];
-            layer->RenderingDataUsed = 0;
-            layer->Draw();
-
-            if (ClippingEnabled && IsLayerOutOfView(layer))
-            {
-                if (!layer->IsOutOfView)
-                {
-                    Log(std::format("Layer no. {} is out of view and won't be drawn.", layer->Id));
-                    layer->IsOutOfView = true;
-                }
-
-                continue;
-            }
-            layer->IsOutOfView = false;
-
-            //substituting buffer's data by layer's newly generated one
-            size_t dataSize = layer->RenderingDataUsed;
-            if (dataSize > 0 || layer->Redraw)
-            {
-                if (dataSize > layerBlock.Size)
-                {
-                    Log(std::format("Layer no. {} has exceeded it's GPU memory limit, expanding from {} to {} bytes.", layer->Id, layerBlock.Size, dataSize * 2));
-                    Vbo.ResizeBlock(layer->BlockIndex, dataSize * 2);
-                }
-
-                layerBlock.Used = dataSize;
-
-                if (dataSize > 0)
-                    glBufferSubData(GL_ARRAY_BUFFER, layerBlock.Offset, dataSize, layer->RenderingData);
-
-                layer->Redraw = false;
-            }
-
-            //setting transform matrix
-            if (layer->IsWorldSpace)
-            {
-                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, WorldToNDCMatrix.Cells);
-            }
-            else
-            {
-                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, IDENTITY_MATRIX.Cells);
-            }
-
-            //draw call
-            glDrawArrays(layer->PrimitiveType, layerBlock.Offset / TCG_VERT_SIZE, layerBlock.Used / TCG_VERT_SIZE);
-        }
-
-        glfwSwapBuffers(Window);
-        glfwPollEvents();
-    }
-
-    glfwTerminate();
-}
-
 
 //camera methods
 
@@ -892,4 +700,202 @@ void Tcg::SaveAtlas(std::filesystem::path path)
 {
     stbi_flip_vertically_on_write(true);
     stbi_write_bmp(path.string().c_str(), Tcg::AtlasWidth, Tcg::AtlasHeight, 4, Tcg::AtlasData);
+}
+
+//init, update, shutdown
+
+void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, bool fullscreen, bool resizable)
+{
+    //!! window creation !!
+
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, resizable);
+
+#ifdef TC_DEBUG_OUTPUT
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
+    glfwSetErrorCallback(GlfwErrorCallback);
+#endif
+
+    Window = glfwCreateWindow(windowWidth, windowHeight, windowName.c_str(), fullscreen ? glfwGetPrimaryMonitor() : nullptr, nullptr);
+    if (Window == nullptr)
+        throw std::runtime_error("Failed to create a GLFW window.");
+    glfwMakeContextCurrent(Window);
+
+    //setting callbacks
+    glfwSetFramebufferSizeCallback(Window, GlfwFramebufferSizeCallback);
+    glfwSetKeyCallback(Window, GlfwKeyCallback);
+    glfwSetCharCallback(Window, GlfwCharCallback);
+    glfwSetMouseButtonCallback(Window, GlfwMouseButtonCallback);
+    glfwSetScrollCallback(Window, GlfwScrollCallback);
+
+    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
+        throw std::runtime_error("Failed to initialize GLAD.");
+
+#ifdef TC_DEBUG_OUTPUT
+    Log(std::format("OpenGL version: {}", std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION)))));
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+    glDebugMessageCallbackARB(GlMessageCallback, 0);
+#endif
+
+    glViewport(0, 0, windowWidth, windowHeight);
+    glClearColor(0, 0, 0, 1);
+
+    UpdateWorldToNDCMatrix();
+    UpdateNDCToPixelMatrix(windowWidth, windowHeight);
+
+    //!! buffer generation !!
+    //VAO is vertex array object, it holds vertex attributes and a VBO
+    //VBO is vertex buffer object, it holds vertex data (each layer has it's own block of memory inside of it)
+
+    glGenVertexArrays(1, &Vao);
+    glBindVertexArray(Vao);
+
+    VboCopy.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_COPY, GL_COPY_WRITE_BUFFER);
+    Vbo.Initialize(0, VboCopy.Name, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_ARRAY_BUFFER);
+    Ssbo.Initialize(0, 0, TCG_BUFFER_SIZE, GL_DYNAMIC_DRAW, GL_SHADER_STORAGE_BUFFER);
+
+    //vertex attributes, interleaved
+    //coords - 2 floats
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, 0);
+    glEnableVertexAttribArray(0);
+
+    //texture coords - 2 floats
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, TCG_VERT_SIZE, reinterpret_cast<void*>(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    //texture index - 1 uint
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    //modulate color - 1 uint
+    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, TCG_VERT_SIZE, reinterpret_cast<void*>(4 * sizeof(float) + sizeof(unsigned int)));
+    glEnableVertexAttribArray(3);
+
+    //!! shader compilation !!
+
+    unsigned int vertShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertShader, 1, &VertexShaderSource, nullptr);
+    glCompileShader(vertShader);
+
+    int success;
+    char msg[256];
+    glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertShader, 256, nullptr, msg);
+        throw std::runtime_error(std::format("Error while compiling the vertex shader: '{}'.", msg));
+    }
+
+    unsigned int fragShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragShader, 1, &FragmentShaderSource, nullptr);
+    glCompileShader(fragShader);
+
+    glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragShader, 256, nullptr, msg);
+        throw std::runtime_error(std::format("Error while compiling the fragment shader: '{}'.", msg));
+    }
+
+    unsigned int shaders;
+    shaders = glCreateProgram();
+    glAttachShader(shaders, vertShader);
+    glAttachShader(shaders, fragShader);
+    glLinkProgram(shaders);
+
+    glGetProgramiv(shaders, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(shaders, 256, nullptr, msg);
+        throw std::runtime_error(std::format("Error while linking shaders: '{}'.", msg));
+    }
+    glDeleteShader(vertShader);
+    glDeleteShader(fragShader);
+    glUseProgram(shaders);
+
+    //shader uniform values
+    UniformNdcMatrix = glGetUniformLocation(shaders, "NDCMatrix");
+
+    //binding ssbo
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TCG_SSBO_BINDING, Ssbo.Name);
+
+    //enable blending
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    //querying max texture size
+    int maxTexSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexSize);
+    AtlasPacker.MaxWidth = AtlasPacker.MaxHeight = maxTexSize / 2;
+}
+
+//blocks the current thread while window is open
+void Tcg::UpdateLoop()
+{
+    while (!glfwWindowShouldClose(Window))
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        for (Tcg::Layer* layer : Layers)
+        {
+            Tcg::BufferBlock& layerBlock = Vbo.Blocks[layer->BlockIndex];
+            layer->RenderingDataUsed = 0;
+            layer->Draw();
+
+            if (ClippingEnabled && IsLayerOutOfView(layer))
+            {
+                if (!layer->IsOutOfView)
+                {
+                    Log(std::format("Layer no. {} is out of view and won't be drawn.", layer->Id));
+                    layer->IsOutOfView = true;
+                }
+
+                continue;
+            }
+            layer->IsOutOfView = false;
+
+            //substituting buffer's data by layer's newly generated one
+            size_t dataSize = layer->RenderingDataUsed;
+            if (dataSize > 0 || layer->Redraw)
+            {
+                if (dataSize > layerBlock.Size)
+                {
+                    Log(std::format("Layer no. {} has exceeded it's GPU memory limit, expanding from {} to {} bytes.", layer->Id, layerBlock.Size, dataSize * 2));
+                    Vbo.ResizeBlock(layer->BlockIndex, dataSize * 2);
+                }
+
+                layerBlock.Used = dataSize;
+
+                if (dataSize > 0)
+                    glBufferSubData(GL_ARRAY_BUFFER, layerBlock.Offset, dataSize, layer->RenderingData);
+
+                layer->Redraw = false;
+            }
+
+            //setting transform matrix
+            if (layer->IsWorldSpace)
+            {
+                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, WorldToNDCMatrix.Cells);
+            }
+            else
+            {
+                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, IDENTITY_MATRIX.Cells);
+            }
+
+            //draw call
+            glDrawArrays(layer->PrimitiveType, layerBlock.Offset / TCG_VERT_SIZE, layerBlock.Used / TCG_VERT_SIZE);
+        }
+
+        glfwSwapBuffers(Window);
+        glfwPollEvents();
+    }
+}
+
+//should be called after graphics is no longer in use
+void Tcg::Shutdown()
+{
+    glfwTerminate();
 }

@@ -64,5 +64,7 @@ int main()
     Tcg::AddLayer(&sierpinskiLayer);
 
     Tcg::UpdateLoop();
+    Tcg::Shutdown();
+
     return 0;
 }

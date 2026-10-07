@@ -64,6 +64,7 @@ namespace Tc::Graphics
 
     void Initialize(int windowWidth, int windowHeight, std::string windowName, bool fullscreen = false, bool resizable = true);
     void UpdateLoop();
+    void Shutdown();
 
     //globals
 

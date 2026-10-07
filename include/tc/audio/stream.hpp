@@ -1,7 +1,7 @@
 #pragma once
 
 //in samples
-#define TCA_DEFAULT_BUFFER_SZ 1024
+#define TCA_DEFAULT_STREAM_BUF_SZ 1024
 
 namespace Tc::Audio
 {
@@ -22,9 +22,11 @@ namespace Tc::Audio
 		float* ReadPtr; //points at the next sample which will be read
 		unsigned int BufferSize;
 
-		Stream(unsigned int bufferSize = 0);
+		Stream(unsigned int sampleRate, unsigned int bufferSize = TCA_DEFAULT_STREAM_BUF_SZ, float* buffer = nullptr);
 		~Stream();
 
+		unsigned int CanWrite();
+		unsigned int CanRead();
 		unsigned int Write(float* data, unsigned int size);
 		unsigned int Read(float* data, unsigned int size);
 		void WriteAll(float* data, unsigned int size);
