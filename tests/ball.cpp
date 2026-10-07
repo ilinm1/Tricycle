@@ -112,7 +112,7 @@ struct BallLayer : Tcg::Layer
         Tc::Vec2 bounds = Tcg::CameraSize / 2.0f;
         if (BallPos.X + BallSize.X > bounds.X || BallPos.X < -bounds.X)
         {
-            BallPos.X = Tc::Clamp(BallPos.X, -bounds.X, bounds.X);
+            BallPos.X = Tc::Clamp(BallPos.X, -bounds.X, bounds.X - BallSize.X);
             BallVelocity.X *= -1.0f;
             if (BallVelocity.Length() > InitialBallSpeed)
                 BallVelocity *= HitSpeedMultiplier;
@@ -121,7 +121,7 @@ struct BallLayer : Tcg::Layer
 
         if (BallPos.Y + BallSize.Y > bounds.Y || BallPos.Y < -bounds.Y)
         {
-            BallPos.Y = Tc::Clamp(BallPos.Y, -bounds.Y, bounds.Y);
+            BallPos.Y = Tc::Clamp(BallPos.Y, -bounds.Y, bounds.Y - BallSize.Y);
             BallVelocity.Y *= -1.0f;
             if (BallVelocity.Length() > InitialBallSpeed)
                 BallVelocity *= HitSpeedMultiplier;
@@ -162,6 +162,7 @@ int main()
     Tcg::UpdateLoop();
     Tcg::Shutdown();
     Tca::Shutdown();
+    audioThread.~thread();
 
     return 0;
 }
