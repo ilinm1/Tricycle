@@ -1,6 +1,5 @@
 #include <vector>
 #include <stdexcept>
-#include <chrono>
 #include <filesystem>
 #include <portaudio.h>
 #include <stb_vorbis.c>
