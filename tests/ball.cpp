@@ -1,4 +1,4 @@
-//testing drawing, layer transparency, texture loading, sound loading & playback, mouse input
+//testing drawing, layer transparency, texture loading, sound loading, mixing and playback, mouse input
 
 #include <thread>
 #include <format>
@@ -32,6 +32,7 @@ struct BallLayer : Tcg::Layer
 {
     Tcg::Texture Texture;
     Tca::AudioFile HitSound;
+    Tca::AudioFile Music;
 
     Tc::Color BallColor;
     Tc::Vec2 BallPos = Tc::Vec2(0.0f);
@@ -51,7 +52,7 @@ struct BallLayer : Tcg::Layer
     const float HitSpeedMultiplier = 0.95f;
     const float TimeStep = 0.1f;
     
-    BallLayer() : Tcg::Layer(true, GL_TRIANGLES, TCG_HEIGHT_MAX), Texture(Tcg::ResolveTexture("test.png")), HitSound(Tca::LoadFile("test.ogg"))
+    BallLayer() : Tcg::Layer(true, GL_TRIANGLES, TCG_HEIGHT_MAX), Texture(Tcg::ResolveTexture("test.png")), HitSound(Tca::LoadFile("test.ogg")), Music(Tca::LoadFile("test2.ogg", false))
     {
         std::default_random_engine engine;
         engine.seed(std::time(nullptr));
@@ -59,6 +60,8 @@ struct BallLayer : Tcg::Layer
         distribution.reset();
         BallVelocity = Tc::Vec2::FromAngle(2.0f * PI * distribution(engine)) * InitialBallSpeed;
 
+        Tca::SetVolume(&Music, 0.5f);
+        Tca::PlayFile(&Music);
         Subscribe<Tcg::MousePressEvent>(&OnMousePress);
     }
 

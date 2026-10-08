@@ -73,7 +73,7 @@ void Tca::Stream::WriteAll(float* data, unsigned int size)
 	}
 	
 	WritePtr = Buffer; //we still have something to write so we do it from the buffer's start
-	std::memcpy(WritePtr, data, size - maxSize * sizeof(float));
+	std::memcpy(WritePtr, data, (size - maxSize) * sizeof(float));
 	WritePtr += size - maxSize;
 }
 

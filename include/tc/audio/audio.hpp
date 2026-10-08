@@ -7,7 +7,8 @@
 #include "stream.hpp"
 
 #define TCA_DEFAULT_SAMPLE_RATE 44100
-#define TCA_STREAM_READ_TIMEOUT 8
+#define TCA_MIX_TIMEOUT 16
+#define TCA_BUFFERING_RATE 16
 
 namespace Tc::Audio
 {

@@ -95,8 +95,9 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 
             if (!generated)
             {
-                if (noSamples++ == TCA_STREAM_READ_TIMEOUT)
+                if (noSamples++ == TCA_MIX_TIMEOUT)
                     break;
+                continue;
             }
 
             if (streamPtr->SampleRate > Tca::IoSampleRate)
@@ -125,6 +126,7 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
     float temp[128]; //128 is an arbitrary number, that should be enough to store samples before downsampling
+    unsigned int noSamples = 0;
     for (; samples > 0; samples -= 8)
     {
         __m256 dataVec = _mm256_setzero_ps();
@@ -137,7 +139,11 @@ void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*
             unsigned int read = streamPtr->Read(temp, toRead);
 
             if (!read)
+            {
+                if (noSamples++ == TCA_MIX_TIMEOUT)
+                    break;
                 continue;
+            }
 
             if (streamPtr->SampleRate > Tca::IoSampleRate)
             {
@@ -292,7 +298,7 @@ Tca::AudioFile LoadFile_Ogg(std::filesystem::path path, bool loadAll)
     );
 
     BufferFile(&result, loadAll ? result.TotalSamples : TCA_DEFAULT_STREAM_BUF_SZ);
-    result.AllLoaded = true;
+    result.AllLoaded = loadAll;
 
     return result;
 }
@@ -520,7 +526,7 @@ void Tca::UpdateLoop()
 
         for (AudioFile* filePtr : AudioFiles)
         {
-            BufferFile(filePtr, TCA_DEFAULT_STREAM_BUF_SZ);
+            BufferFile(filePtr, TCA_BUFFERING_RATE);
         }
 
         AudioFileOpLock.unlock();
