@@ -1,5 +1,6 @@
 #include <vector>
 #include <stdexcept>
+#include <chrono>
 #include <filesystem>
 #include <portaudio.h>
 #include <stb_vorbis.c>
@@ -162,6 +163,7 @@ void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*
 //mixes samples from the 'streams' and 'data' buffer and writes the result back to 'data'
 void MixStreams(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
+    Tca::AudioFileOpLock.lock();
 #ifdef TC_USE_SIMD
     unsigned int forSimd = samples / 8 * 8;
     unsigned int leftover = samples % 8;
@@ -171,6 +173,7 @@ void MixStreams(float* data, unsigned int samples, std::vector<Tca::Stream*>& st
 #else
     MixStreams_NoSimd(data, samples, streams);
 #endif
+    Tca::AudioFileOpLock.unlock();
 }
 
 int IoCallback(const void* input, void* output, unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
@@ -209,6 +212,8 @@ int IoCallback(const void* input, void* output, unsigned long frameCount, const 
 }
 
 //file methods
+//note about thread safety: I'm assuming that chances of two threads changing volume/speed/seeking the same file/stream are very slim so there's no locks there
+//however there are locks in 'AddFile' and 'StopFile' since they are very likely to collide with the I/O callback or 'UpdateLoop'
 
 void BufferFile_Ogg(Tca::AudioFile* filePtr, unsigned int samples)
 {
@@ -296,6 +301,7 @@ Tca::AudioFile LoadFile_Ogg(std::filesystem::path path, bool loadAll)
 //loads an audio file from 'path' and returns the associated 'AudioFile' object
 //if 'loadAll' is set the entirety of the file will be decoded and stored in memory; otherwise it will be decoded piece by piece
 //second option reduces the amount of memory used by the audio, as well as the execution time of this method but requires running the 'UpdateLoop' method to continue loading the audio
+//todo: universal mechanism for managing audio files (like 'ResolveTexture')
 Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool loadAll)
 {
     std::string ext = path.extension().string();
@@ -311,16 +317,21 @@ Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool loadAll)
 }
 
 //don't forget to set file's 'Repeat' to play it indefinitely
+//todo: app may get stuck on this method, waiting for the audio thread to unlock the mutex
 void Tca::PlayFile(AudioFile* filePtr)
 {
     if (filePtr->Playing)
         return;
 
+    AudioFileOpLock.lock();
+
+    filePtr->Playing = true;
     SeekFile(filePtr, 0);
     AddStream(&filePtr->LeftChannelStream, true);
     AddStream(&filePtr->RightChannelStream, false);
     AudioFiles.push_back(filePtr);
-    filePtr->Playing = true;
+
+    AudioFileOpLock.unlock();
 }
 
 void Tca::SeekFile(AudioFile* filePtr, unsigned int sample)
@@ -330,14 +341,16 @@ void Tca::SeekFile(AudioFile* filePtr, unsigned int sample)
         filePtr->LeftChannelStream.ReadPtr = filePtr->LeftChannelStream.Buffer;
         filePtr->RightChannelStream.ReadPtr = filePtr->RightChannelStream.Buffer;
     }
-
-    switch (filePtr->Format)
+    else
     {
-        case AudioFileFormat::Ogg:
-            stb_vorbis_seek_frame(reinterpret_cast<stb_vorbis*>(filePtr->Handle), sample);
-            break;
-        default:
-            throw std::runtime_error("Tried seeking a file with an unknown format.");
+        switch (filePtr->Format)
+        {
+            case AudioFileFormat::Ogg:
+                stb_vorbis_seek_frame(reinterpret_cast<stb_vorbis*>(filePtr->Handle), sample);
+                break;
+            default:
+                throw std::runtime_error("Tried seeking a file with an unknown format.");
+        }
     }
 }
 
@@ -352,21 +365,27 @@ void Tca::StopFile(AudioFile* filePtr, bool close)
     if (!filePtr->Playing)
         return;
 
+    AudioFileOpLock.lock();
+
     RemoveStream(&filePtr->LeftChannelStream, true);
     RemoveStream(&filePtr->RightChannelStream, false);
     AudioFiles.erase(std::find(AudioFiles.begin(), AudioFiles.end(), filePtr));
     filePtr->Playing = false;
+
+    AudioFileOpLock.unlock();
 }
 
 void Tca::SetVolume(AudioFile* filePtr, float volume)
 {
     filePtr->LeftChannelStream.Volume = volume;
+    if (StereoEnabled)
+        filePtr->RightChannelStream.Volume = volume;
 }
 
 void Tca::SetVolume(AudioFile* filePtr, float left, float right)
 {
     if (!filePtr->Stereo)
-        throw std::runtime_error("Tried setting volume for two channels on a non-stereo audio file.");
+        throw std::runtime_error("Tried setting separate volume for left & right channel on a non-stereo audio file.");
 
     filePtr->LeftChannelStream.Volume = left;
     filePtr->RightChannelStream.Volume = right;
@@ -380,10 +399,13 @@ void Tca::SetSpeed(AudioFile* filePtr, float speed)
 }
 
 //stream methods
+//note about thread safety: same reasoning as before, 'SetVolume' and 'SetSpeed' do not have any locks
 
 //adds the specified stream to the left channel if 'left' is set or stereo audio is disabled, or to the right channel otherwise
 void Tca::AddStream(Stream* streamPtr, bool left)
 {
+    AudioFileOpLock.lock();
+
     if (!StereoEnabled || left)
     {
         LeftChannelStreams.push_back(streamPtr);
@@ -392,6 +414,8 @@ void Tca::AddStream(Stream* streamPtr, bool left)
     {
         RightChannelStreams.push_back(streamPtr);
     }
+
+    AudioFileOpLock.unlock();
 }
 
 //removes the stream from both channels
@@ -405,6 +429,8 @@ void Tca::RemoveStream(Stream* streamPtr)
 //removes the stream from the left channel if 'left' is set, or from the right channel otherwise
 void Tca::RemoveStream(Stream* streamPtr, bool left)
 {
+    AudioFileOpLock.lock();
+
     if (left)
     {
         LeftChannelStreams.erase(std::find(LeftChannelStreams.begin(), LeftChannelStreams.end(), streamPtr));
@@ -413,12 +439,18 @@ void Tca::RemoveStream(Stream* streamPtr, bool left)
     {
         RightChannelStreams.erase(std::find(RightChannelStreams.begin(), RightChannelStreams.end(), streamPtr));
     }
+
+    AudioFileOpLock.unlock();
 }
 
 void Tca::RemoveAllStreams()
 {
+    AudioFileOpLock.lock();
+
     LeftChannelStreams.clear();
     RightChannelStreams.clear();
+
+    AudioFileOpLock.unlock();
 }
 
 //you can do the same by directly changing the stream's 'Volume', this exists just to make the header prettier
@@ -446,6 +478,8 @@ bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate, bool des
         StereoEnabled = stereo;
         InputEnabled = input;
 
+        AudioFileOpLock.lock();
+
         if (!StereoEnabled && stereo)
         {
             for (AudioFile* filePtr : AudioFiles)
@@ -457,6 +491,8 @@ bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate, bool des
 
         if (!stereo)
             RightChannelStreams.clear();
+
+        AudioFileOpLock.unlock();
 
         return true;
     }
@@ -481,10 +517,14 @@ void Tca::UpdateLoop()
 {
     while (true)
     {
+        AudioFileOpLock.lock();
+
         for (AudioFile* filePtr : AudioFiles)
         {
             BufferFile(filePtr, TCA_DEFAULT_STREAM_BUF_SZ);
         }
+
+        AudioFileOpLock.unlock();
     }
 }
 

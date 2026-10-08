@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <unordered_map>
 #include <portaudio.h>
 #include "audio_file.hpp"
@@ -45,9 +46,10 @@ namespace Tc::Audio
 	inline std::vector<Stream*> LeftChannelStreams; //if output is mono then this will be the only available channel
 	inline std::vector<Stream*> RightChannelStreams;
 	inline std::vector<AudioFile*> AudioFiles; //all currently played files
+	inline std::recursive_mutex AudioFileOpLock;
 
 	inline PaStream* IoStreamPtr;
 	inline unsigned int IoSampleRate;
-	inline bool StereoEnabled;
+	inline bool StereoEnabled = true;
 	inline bool InputEnabled;
 }
