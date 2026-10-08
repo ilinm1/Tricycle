@@ -1,7 +1,7 @@
 #pragma once
 
 //in samples
-#define TCA_DEFAULT_STREAM_BUF_SZ 4096
+#define TCA_DEFAULT_STREAM_BUF_SZ 2048
 
 namespace Tc::Audio
 {
