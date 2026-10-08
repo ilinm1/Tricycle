@@ -323,13 +323,14 @@ Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool loadAll)
 
 //don't forget to set file's 'Repeat' to play it indefinitely
 //todo: app may get stuck on this method, waiting for the audio thread to unlock the mutex
-void Tca::PlayFile(AudioFile* filePtr)
+void Tca::PlayFile(AudioFile* filePtr, bool repeat)
 {
     if (filePtr->Playing)
         return;
 
     AudioFileOpLock.lock();
 
+    filePtr->Repeat = repeat;
     filePtr->Playing = true;
     SeekFile(filePtr, 0);
     AddStream(&filePtr->LeftChannelStream, true);

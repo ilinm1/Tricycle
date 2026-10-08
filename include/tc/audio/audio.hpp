@@ -17,7 +17,7 @@ namespace Tc::Audio
 	//file methods
 
 	AudioFile LoadFile(std::filesystem::path path, bool loadAll = true);
-	void PlayFile(AudioFile* filePtr);
+	void PlayFile(AudioFile* filePtr, bool repeat = false);
 	void SeekFile(AudioFile* filePtr, unsigned int sample);
 	void SeekFileSeconds(AudioFile* filePtr, float seconds);
 	void StopFile(AudioFile* filePtr, bool close = true);
