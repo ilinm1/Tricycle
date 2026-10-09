@@ -35,8 +35,8 @@ unsigned int Downsample(float* in, float* out, unsigned int inRate, unsigned int
         throw std::runtime_error("Old sample rate must be higher than new sample rate when downsampling.");
 
     float ratio = static_cast<float>(inRate) / outRate;
-    int minSamples = static_cast<int>(ratio);
-    int period = static_cast<int>(1.0f / fmodf(ratio, 1.0f));
+    int minSamples = ratio;
+    int period = roundf(1.0f / fmodf(ratio, 1.0f));
 
     unsigned int inIndex = 0, outIndex = 0;
     while (inIndex < inSamples)
@@ -56,20 +56,20 @@ unsigned int Upsample(float* in, float* out, unsigned int inRate, unsigned int o
     if (inRate > outRate)
         throw std::runtime_error("Old sample rate must be lower than new sample rate when upsampling.");
 
-    float ratio = static_cast<float>(inRate) / outRate;
-    int minSamples = static_cast<int>(ratio);
+    float ratio = static_cast<float>(outRate) / inRate;
+    int minSamples = ratio;
     int period = static_cast<int>(1.0f / fmodf(ratio, 1.0f));
 
     unsigned int inIndex = 0, outIndex = 0;
     while (inIndex < inSamples)
     {
         float a = in[inIndex];
-        float b = in[inIndex + 1];
+        float b = inIndex == inSamples - 1 ? a : in[inIndex + 1];
 
         int count = minSamples + (period == 0 || inIndex % period ? 0 : 1);
         for (unsigned int i = 0; i < count; i++, outIndex++)
         {
-            out[outIndex] = a + (b - a) * static_cast<float>(i) / count;
+            out[outIndex] = a + (b - a) * (static_cast<float>(i) / count); //linearly interpolating between adjacent samples
         }
 
         inIndex++;
@@ -89,8 +89,8 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
             float upsample[128];
 
             unsigned int toRead = std::min(samples, 128u);
-            unsigned int ratio = (streamPtr->SampleRate + Tca::IoSampleRate - 1) / Tca::IoSampleRate;
-            toRead = streamPtr->SampleRate > Tca::IoSampleRate ? toRead * ratio : toRead / ratio;
+            float ratio = static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate;
+            toRead = roundf(toRead * ratio);
             unsigned int generated = streamPtr->Read(temp, toRead);
 
             if (!generated)
@@ -134,8 +134,8 @@ void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*
         {
             __m256 streamVec, volumeVec;
 
-            unsigned int ratio = (streamPtr->SampleRate + Tca::IoSampleRate - 1) / Tca::IoSampleRate;
-            unsigned int toRead = streamPtr->SampleRate > Tca::IoSampleRate ? 8 * ratio : 8 / ratio;
+            float ratio = static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate;
+            unsigned int toRead = roundf(8 * ratio);
             unsigned int read = streamPtr->Read(temp, toRead);
 
             if (!read)
@@ -327,6 +327,9 @@ void Tca::PlayFile(AudioFile* filePtr, bool repeat)
     if (filePtr->Playing)
         return;
 
+    if (filePtr->SampleRate != Tca::IoSampleRate)
+        Tc::Log(std::format("File's ('{}') sample rate does not match the output sample rate ({} vs {}), please consider resampling it for better performance.", filePtr->Path.string(), filePtr->SampleRate, IoSampleRate));
+
     AudioFileOpLock.lock();
 
     filePtr->Repeat = repeat;
@@ -471,8 +474,15 @@ void Tca::SetSpeed(Stream* streamPtr, float speed)
 
 //(re)configures the IO stream with the given parameters
 //returns true if stream was opened and started succesfully
-bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate, bool destroyStreams)
+bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate)
 {
+    Tc::Log(std::format(
+        "Attempting to configure the I/O stream; Stereo: {} -> {}; Input: {} -> {}; Sample rate: {} -> {}.",
+        StereoEnabled, stereo,
+        InputEnabled, input,
+        IoSampleRate, sampleRate
+    ));
+
     if (IoStreamPtr && Pa_IsStreamActive(IoStreamPtr))
         CheckPaErrors(Pa_AbortStream(Tca::IoStreamPtr));
 
@@ -498,10 +508,11 @@ bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate, bool des
             RightChannelStreams.clear();
 
         AudioFileOpLock.unlock();
-
+        Tc::Log("I/O stream configured.");
         return true;
     }
 
+    Tc::Log("Failed to configure the I/O stream.");
     return false;
 }
 

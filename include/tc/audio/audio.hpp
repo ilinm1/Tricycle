@@ -12,7 +12,7 @@
 
 namespace Tc::Audio
 {
-	bool ConfigureIo(bool stereo = true, bool input = false, unsigned int sampleRate = TCA_DEFAULT_SAMPLE_RATE, bool removeStreams = true);
+	bool ConfigureIo(bool stereo = true, bool input = false, unsigned int sampleRate = TCA_DEFAULT_SAMPLE_RATE);
 
 	//file methods
 

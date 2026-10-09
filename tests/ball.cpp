@@ -60,7 +60,7 @@ struct BallLayer : Tcg::Layer
         distribution.reset();
         BallVelocity = Tc::Vec2::FromAngle(2.0f * PI * distribution(engine)) * InitialBallSpeed;
 
-        Tca::SetVolume(&Music, 0.5f);
+        Tca::SetVolume(&Music, 0.3f);
         Tca::PlayFile(&Music);
         Subscribe<Tcg::MousePressEvent>(&OnMousePress);
     }
@@ -133,6 +133,8 @@ struct BallLayer : Tcg::Layer
 
         if (hit)
         {
+            Tca::SetSpeed(&HitSound, BallVelocity.Length() / InitialBallSpeed);
+
             if (HitSound.Playing)
             {
                 Tca::SeekFile(&HitSound, 0);
