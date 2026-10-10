@@ -130,7 +130,7 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 //'samples' should be a multiple of 8 to avoid reading past the end of 'data' which may cause a segfault under some conditions
 void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
-    float temp[128]; //we're reading in chuncks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
+    float temp[128]; //we're reading in chunks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
     unsigned int noSamples = 0;
     for (; samples > 0; samples -= 8)
     {
