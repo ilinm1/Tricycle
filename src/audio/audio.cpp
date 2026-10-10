@@ -80,15 +80,20 @@ unsigned int Upsample(float* in, float* out, unsigned int inRate, unsigned int o
 
 void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
+    std::memset(data, 0, samples * sizeof(float));
+
     for (Tca::Stream* streamPtr : streams)
     {
-        unsigned int noSamples = 0;
-        while (samples)
+        float* writePtr = data;
+        unsigned int leftover = samples, noSamples = 0;
+        while (leftover)
         {
-            float temp[1024]; //buffer sizes were chosen arbitrarily
-            float upsample[128];
+            //we're reading in chunks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
+            //and no more than 8 (9 if an extra sample is generated) samples to store the upsample
+            float temp[128];
+            float upsample[16];
 
-            unsigned int toRead = std::min(samples, 128u);
+            unsigned int toRead = std::min(leftover, 8u);
             float ratio = static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate;
             toRead = roundf(toRead * ratio);
             unsigned int generated = streamPtr->Read(temp, toRead);
@@ -109,14 +114,14 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
                 generated = Upsample(temp, upsample, streamPtr->SampleRate, Tca::IoSampleRate, generated);
             }
 
+            generated = std::min(leftover, generated); //sometimes an extra sample can be generated leading to the corruption of data
             for (unsigned int i = 0; i < generated; i++)
             {
-                data[i] = 0;
-                data[i] += (streamPtr->SampleRate < Tca::IoSampleRate ? upsample[i] : temp[i]) * streamPtr->Volume;
+                writePtr[i] += (streamPtr->SampleRate < Tca::IoSampleRate ? upsample[i] : temp[i]) * streamPtr->Volume;
             }
 
-            data += generated;
-            samples -= generated;
+            writePtr += generated;
+            leftover -= generated;
         }
     }
 }
@@ -125,7 +130,7 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 //'samples' should be a multiple of 8 to avoid reading past the end of 'data' which may cause a segfault under some conditions
 void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
-    float temp[128]; //128 is an arbitrary number, that should be enough to store samples before downsampling
+    float temp[128]; //we're reading in chuncks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
     unsigned int noSamples = 0;
     for (; samples > 0; samples -= 8)
     {
