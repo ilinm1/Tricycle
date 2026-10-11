@@ -33,7 +33,8 @@ add_library(
     tc_audio STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/audio.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/audio_file.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/stream.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/stream.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/stb/stb_vorbis.c)
 
 target_include_directories(
     tc_audio PUBLIC
@@ -43,15 +44,15 @@ target_include_directories(
 
 target_link_libraries(tc_audio portaudio)
 
-#tests
-add_executable(test_ball tests/ball.cpp)
-target_link_libraries(test_ball tc_graphics tc_audio)
+#examples
+add_executable(ex_ball examples/ball.cpp)
+target_link_libraries(ex_ball tc_graphics tc_audio)
 
-add_executable(test_text tests/text.cpp)
-target_link_libraries(test_text tc_graphics)
+add_executable(ex_text examples/text.cpp)
+target_link_libraries(ex_text tc_graphics)
 
-add_executable(test_sierpinski tests/sierpinski.cpp)
-target_link_libraries(test_sierpinski tc_graphics)
+add_executable(ex_sierpinski examples/sierpinski.cpp)
+target_link_libraries(ex_sierpinski tc_graphics)
 
-add_executable(test_calculator tests/calculator.cpp)
-target_link_libraries(test_calculator tc_graphics)
+add_executable(ex_calculator examples/calculator.cpp)
+target_link_libraries(ex_calculator tc_graphics)
