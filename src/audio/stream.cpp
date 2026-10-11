@@ -15,6 +15,9 @@ Tca::Stream::Stream(unsigned int sampleRate, unsigned int bufferSize, float* buf
 
 Tca::Stream::~Stream()
 {
+	if (!Buffer || !BufferSize)
+		return;
+
 	delete[] Buffer;
 }
 

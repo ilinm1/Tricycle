@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <portaudio.h>
-#include <stb_vorbis.c>
+#include <stb_vorbis.h>
 #include "tc/misc/misc.hpp"
 #include "tc/audio/audio.hpp"
 #include "tc/audio/audio_file.hpp"
@@ -25,11 +25,11 @@ bool CheckPaErrors(PaError error)
     return true;
 }
 
-//callback
+//general methods, callback
 
 //downsamples 'inSamples' samples from 'in' and writes the result to 'out'; 'in' and 'out' may be the same buffer
 //returns the amount of newly generated samples
-unsigned int Downsample(float* in, float* out, unsigned int inRate, unsigned int outRate, unsigned int inSamples)
+unsigned int Tca::Downsample(float* in, float* out, unsigned int inRate, unsigned int outRate, unsigned int inSamples)
 {
     if (inRate < outRate)
         throw std::runtime_error("Old sample rate must be higher than new sample rate when downsampling.");
@@ -51,7 +51,7 @@ unsigned int Downsample(float* in, float* out, unsigned int inRate, unsigned int
 
 //upsamples 'inSamples' samples from 'in' and writes the result to 'out'
 //returns the amount of newly generated samples
-unsigned int Upsample(float* in, float* out, unsigned int inRate, unsigned int outRate, unsigned int inSamples)
+unsigned int Tca::Upsample(float* in, float* out, unsigned int inRate, unsigned int outRate, unsigned int inSamples)
 {
     if (inRate > outRate)
         throw std::runtime_error("Old sample rate must be lower than new sample rate when upsampling.");
@@ -90,12 +90,12 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
         {
             //we're reading in chunks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
             //and no more than 8 (9 if an extra sample is generated) samples to store the upsample
-            float temp[128];
+            float temp[8 * TCA_MAX_SPEEDUP];
             float upsample[16];
 
             unsigned int toRead = std::min(leftover, 8u);
             float ratio = static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate;
-            toRead = roundf(toRead * ratio);
+            toRead = std::min(static_cast<size_t>(roundf(toRead * ratio)), sizeof(temp));
             unsigned int generated = streamPtr->Read(temp, toRead);
 
             if (!generated)
@@ -107,11 +107,11 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 
             if (streamPtr->SampleRate > Tca::IoSampleRate)
             {
-                generated = Downsample(temp, temp, streamPtr->SampleRate, Tca::IoSampleRate, generated);
+                generated = Tca::Downsample(temp, temp, streamPtr->SampleRate, Tca::IoSampleRate, generated);
             }
             if (streamPtr->SampleRate < Tca::IoSampleRate)
             {
-                generated = Upsample(temp, upsample, streamPtr->SampleRate, Tca::IoSampleRate, generated);
+                generated = Tca::Upsample(temp, upsample, streamPtr->SampleRate, Tca::IoSampleRate, generated);
             }
 
             generated = std::min(leftover, generated); //sometimes an extra sample can be generated leading to the corruption of data
@@ -130,7 +130,7 @@ void MixStreams_NoSimd(float* data, unsigned int samples, std::vector<Tca::Strea
 //'samples' should be a multiple of 8 to avoid reading past the end of 'data' which may cause a segfault under some conditions
 void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*>& streams)
 {
-    float temp[128]; //we're reading in chunks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
+    float temp[8 * TCA_MAX_SPEEDUP]; //we're reading in chunks of 8 samples; if stream is 16 times faster we need 8 * 16 = 128 samples to store the samples before downsampling
     unsigned int noSamples = 0;
     for (; samples > 0; samples -= 8)
     {
@@ -139,8 +139,8 @@ void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*
         {
             __m256 streamVec, volumeVec;
 
-            float ratio = static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate;
-            unsigned int toRead = roundf(8 * ratio);
+            float ratio = std::min(static_cast<float>(streamPtr->SampleRate) / Tca::IoSampleRate, 16.0f);
+            unsigned int toRead = std::min(static_cast<size_t>(roundf(8 * ratio)), sizeof(temp));
             unsigned int read = streamPtr->Read(temp, toRead);
 
             if (!read)
@@ -152,11 +152,11 @@ void MixStreams_Simd(float* data, unsigned int samples, std::vector<Tca::Stream*
 
             if (streamPtr->SampleRate > Tca::IoSampleRate)
             {
-                Downsample(temp, temp, streamPtr->SampleRate, Tca::IoSampleRate, read);
+                Tca::Downsample(temp, temp, streamPtr->SampleRate, Tca::IoSampleRate, read);
             }
             else if (streamPtr->SampleRate < Tca::IoSampleRate)
             {
-                Upsample(temp, data, streamPtr->SampleRate, Tca::IoSampleRate, read);
+                Tca::Upsample(temp, data, streamPtr->SampleRate, Tca::IoSampleRate, read);
             }
 
             streamVec = _mm256_loadu_ps(streamPtr->SampleRate < Tca::IoSampleRate ? data : temp);
@@ -221,13 +221,57 @@ int IoCallback(const void* input, void* output, unsigned long frameCount, const 
     return PaStreamCallbackResult::paContinue;
 }
 
+//(re)configures the IO stream with the given parameters
+//returns true if stream was opened and started succesfully
+bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate)
+{
+    Tc::Log(std::format(
+        "Attempting to configure the I/O stream; Stereo: {} -> {}; Input: {} -> {}; Sample rate: {} -> {}.",
+        StereoEnabled, stereo,
+        InputEnabled, input,
+        IoSampleRate, sampleRate
+    ));
+
+    if (IoStreamPtr && Pa_IsStreamActive(IoStreamPtr))
+        CheckPaErrors(Pa_AbortStream(Tca::IoStreamPtr));
+
+    if (CheckPaErrors(Pa_OpenDefaultStream(&IoStreamPtr, input ? 1 : 0, stereo ? 2 : 1, paFloat32 | paNonInterleaved, sampleRate, paFramesPerBufferUnspecified, &IoCallback, nullptr)) &&
+        CheckPaErrors(Pa_StartStream(IoStreamPtr)))
+    {
+        IoSampleRate = sampleRate;
+        StereoEnabled = stereo;
+        InputEnabled = input;
+
+        AudioFileOpLock.lock();
+
+        if (!StereoEnabled && stereo)
+        {
+            for (AudioFile* filePtr : AudioFiles)
+            {
+                filePtr->RightChannelStream.ReadPtr = filePtr->LeftChannelStream.ReadPtr;
+                AddStream(&filePtr->RightChannelStream, false);
+            }
+        }
+
+        if (!stereo)
+            RightChannelStreams.clear();
+
+        AudioFileOpLock.unlock();
+        Tc::Log("I/O stream configured.");
+        return true;
+    }
+
+    Tc::Log("Failed to configure the I/O stream.");
+    return false;
+}
+
 //file methods
 //note about thread safety: I'm assuming that chances of two threads changing volume/speed/seeking the same file/stream are very slim so there's no locks there
 //however there are locks in 'AddFile' and 'StopFile' since they are very likely to collide with the I/O callback or 'UpdateLoop'
 
 void BufferFile_Ogg(Tca::AudioFile* filePtr, unsigned int samples)
 {
-    if (!filePtr->AllLoaded)
+    if (!filePtr->Buffered)
     {
         static float leftChannel[TCA_DEFAULT_STREAM_BUF_SZ], rightChannel[TCA_DEFAULT_STREAM_BUF_SZ];
         float* channels[2];
@@ -284,35 +328,40 @@ void BufferFile(Tca::AudioFile* filePtr, unsigned int samples)
     }
 }
 
-Tca::AudioFile LoadFile_Ogg(std::filesystem::path path, bool loadAll)
+Tca::AudioFile LoadFile_Ogg(std::filesystem::path path, bool buffered)
 {
     int error;
-    stb_vorbis* file = stb_vorbis_open_filename(path.string().c_str(), &error, nullptr);
-    if (!file)
+    stb_vorbis* vorbisPtr = stb_vorbis_open_filename(path.string().c_str(), &error, nullptr);
+    if (!vorbisPtr)
         throw std::runtime_error(std::format("stb_vorbis couldn't load the file - error code {}.", error));
 
-    unsigned int samples = stb_vorbis_stream_length_in_samples(file);
+    stb_vorbis_info info = stb_vorbis_get_info(vorbisPtr);
+    unsigned int samples = stb_vorbis_stream_length_in_samples(vorbisPtr);
+
     Tca::AudioFile result(
         path,
         Tca::AudioFileFormat::Ogg,
-        file->sample_rate,
+        info.sample_rate,
         samples,
-        file->channels > 1,
-        loadAll ? samples + 1 : TCA_DEFAULT_STREAM_BUF_SZ,
-        file
+        info.channels > 1,
+        buffered ? samples + 1 : TCA_DEFAULT_STREAM_BUF_SZ,
+        vorbisPtr
     );
 
-    BufferFile(&result, loadAll ? result.TotalSamples : TCA_DEFAULT_STREAM_BUF_SZ);
-    result.AllLoaded = loadAll;
+    BufferFile(&result, buffered ? result.TotalSamples : TCA_DEFAULT_STREAM_BUF_SZ);
+    result.Buffered = buffered;
+
+    if (buffered)
+        stb_vorbis_close(vorbisPtr);
 
     return result;
 }
 
 //loads an audio file from 'path' and returns the associated 'AudioFile' object
-//if 'loadAll' is set the entirety of the file will be decoded and stored in memory; otherwise it will be decoded piece by piece
+//if 'buffered' is set the entirety of the file will be decoded and stored in memory; otherwise it will be decoded piece by piece from the disk (streamed)
 //second option reduces the amount of memory used by the audio, as well as the execution time of this method but requires running the 'UpdateLoop' method to continue loading the audio
-//todo: universal mechanism for managing audio files (like 'ResolveTexture')
-Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool loadAll)
+//also streamed files cannot be copied so in order to play the same file with different parameters you will need to call 'LoadFile' again
+Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool buffered)
 {
     std::string ext = path.extension().string();
 
@@ -322,11 +371,13 @@ Tca::AudioFile Tca::LoadFile(std::filesystem::path path, bool loadAll)
     switch (AudioFileFormats.at(ext))
     {
         case AudioFileFormat::Ogg:
-            return LoadFile_Ogg(path, loadAll);
+            return LoadFile_Ogg(path, buffered);
     }
 }
 
-//don't forget to set file's 'Repeat' to play it indefinitely
+//starts playing the file, doesn't block the caller thread
+//if 'repeat' is set then the file will be played indefinitely until 'StopFile' is called
+//if the file is already playing this method does nothing, you may use 'SeekFile' to start playing the same file again or create a copy of the file IF IT'S BUFFERED
 void Tca::PlayFile(AudioFile* filePtr, bool repeat)
 {
     if (filePtr->Playing)
@@ -347,9 +398,10 @@ void Tca::PlayFile(AudioFile* filePtr, bool repeat)
     AudioFileOpLock.unlock();
 }
 
+//see also: 'SeekFileSeconds'
 void Tca::SeekFile(AudioFile* filePtr, unsigned int sample)
 {
-    if (filePtr->AllLoaded)
+    if (filePtr->Buffered)
     {
         filePtr->LeftChannelStream.ReadPtr = filePtr->LeftChannelStream.Buffer;
         filePtr->RightChannelStream.ReadPtr = filePtr->RightChannelStream.Buffer;
@@ -372,8 +424,9 @@ void Tca::SeekFileSeconds(AudioFile* filePtr, float seconds)
     SeekFile(filePtr, filePtr->SampleRate * seconds);
 }
 
-//if 'close' is set then file will be closed, and it won't be possible to play it again; set it if you're sure you won't need it anymore to save some resources
-void Tca::StopFile(AudioFile* filePtr, bool close)
+//if 'free' is set then the file's resources will be freed, and it won't be possible to play it again; set it if you're sure you won't need it anymore to save some resources
+//this will also make copies of the buffered files unusable so keep that in mind
+void Tca::StopFile(AudioFile* filePtr, bool free)
 {
     if (!filePtr->Playing)
         return;
@@ -385,9 +438,13 @@ void Tca::StopFile(AudioFile* filePtr, bool close)
     AudioFiles.erase(std::find(AudioFiles.begin(), AudioFiles.end(), filePtr));
     filePtr->Playing = false;
 
+    if (free)
+        filePtr->~AudioFile();
+
     AudioFileOpLock.unlock();
 }
 
+//1 is the original volume
 void Tca::SetVolume(AudioFile* filePtr, float volume)
 {
     filePtr->LeftChannelStream.Volume = volume;
@@ -404,6 +461,7 @@ void Tca::SetVolume(AudioFile* filePtr, float left, float right)
     filePtr->RightChannelStream.Volume = right;
 }
 
+//1 is the original speed, max speedup relative to the output stream is defined by 'TCA_MAX_SPEEDUP'
 void Tca::SetSpeed(AudioFile* filePtr, float speed)
 {
     SetSpeed(&filePtr->LeftChannelStream, speed);
@@ -431,14 +489,6 @@ void Tca::AddStream(Stream* streamPtr, bool left)
     AudioFileOpLock.unlock();
 }
 
-//removes the stream from both channels
-void Tca::RemoveStream(Stream* streamPtr)
-{
-    RemoveStream(streamPtr, true);
-    if (StereoEnabled)
-        RemoveStream(streamPtr, false);
-}
-
 //removes the stream from the left channel if 'left' is set, or from the right channel otherwise
 void Tca::RemoveStream(Stream* streamPtr, bool left)
 {
@@ -454,6 +504,14 @@ void Tca::RemoveStream(Stream* streamPtr, bool left)
     }
 
     AudioFileOpLock.unlock();
+}
+
+//removes the stream from both channels
+void Tca::RemoveStream(Stream* streamPtr)
+{
+    RemoveStream(streamPtr, true);
+    if (StereoEnabled)
+        RemoveStream(streamPtr, false);
 }
 
 void Tca::RemoveAllStreams()
@@ -472,53 +530,10 @@ void Tca::SetVolume(Stream* streamPtr, float volume)
     streamPtr->Volume = volume;
 }
 
+//1 is the original speed, max speedup relative to the output stream is defined by 'TCA_MAX_SPEEDUP'
 void Tca::SetSpeed(Stream* streamPtr, float speed)
 {
     streamPtr->SampleRate = static_cast<unsigned int>(speed * streamPtr->OriginalSampleRate);
-}
-
-//(re)configures the IO stream with the given parameters
-//returns true if stream was opened and started succesfully
-bool Tca::ConfigureIo(bool stereo, bool input, unsigned int sampleRate)
-{
-    Tc::Log(std::format(
-        "Attempting to configure the I/O stream; Stereo: {} -> {}; Input: {} -> {}; Sample rate: {} -> {}.",
-        StereoEnabled, stereo,
-        InputEnabled, input,
-        IoSampleRate, sampleRate
-    ));
-
-    if (IoStreamPtr && Pa_IsStreamActive(IoStreamPtr))
-        CheckPaErrors(Pa_AbortStream(Tca::IoStreamPtr));
-
-    if (CheckPaErrors(Pa_OpenDefaultStream(&IoStreamPtr, input ? 1 : 0, stereo ? 2 : 1, paFloat32 | paNonInterleaved, sampleRate, paFramesPerBufferUnspecified, &IoCallback, nullptr)) &&
-        CheckPaErrors(Pa_StartStream(IoStreamPtr)))
-    {
-        IoSampleRate = sampleRate;
-        StereoEnabled = stereo;
-        InputEnabled = input;
-
-        AudioFileOpLock.lock();
-
-        if (!StereoEnabled && stereo)
-        {
-            for (AudioFile* filePtr : AudioFiles)
-            {
-                filePtr->RightChannelStream.ReadPtr = filePtr->LeftChannelStream.ReadPtr;
-                AddStream(&filePtr->RightChannelStream, false);
-            }
-        }
-
-        if (!stereo)
-            RightChannelStreams.clear();
-
-        AudioFileOpLock.unlock();
-        Tc::Log("I/O stream configured.");
-        return true;
-    }
-
-    Tc::Log("Failed to configure the I/O stream.");
-    return false;
 }
 
 //init, update

@@ -85,66 +85,58 @@ namespace Tc
             return Vec2{ abs(X), abs(Y) };
         }
 
-        Vec2& operator+=(const Vec2& r)
+        Vec2 operator+(const Vec2& other)
         {
-            X += r.X;
-            Y += r.Y;
+            return Vec2(X + other.X, Y + other.Y);
+        }
+
+        Vec2& operator+=(const Vec2& other)
+        {
+            *this = *this + other;
             return *this;
         }
 
-        friend Vec2 operator+(Vec2 l, const Vec2& r)
+        Vec2 operator-(const Vec2& other)
         {
-            l += r;
-            return l;
+            return Vec2(X - other.X, Y - other.Y);
         }
 
-        Vec2& operator-=(const Vec2& r)
+        Vec2& operator-=(const Vec2& other)
         {
-            X -= r.X;
-            Y -= r.Y;
+            *this = *this - other;
             return *this;
         }
 
-        friend Vec2 operator-(Vec2 l, const Vec2& r)
+        Vec2 operator*(const float& other)
         {
-            l -= r;
-            return l;
+            return Vec2(X * other, Y * other);
         }
 
-        Vec2& operator*=(const float& r)
+        Vec2& operator*=(const float& other)
         {
-            X *= r;
-            Y *= r;
+            *this = *this * other;
             return *this;
         }
 
-        friend Vec2 operator*(Vec2 l, const float& r)
+        Vec2 operator/(const float& other)
         {
-            l *= r;
-            return l;
+            return Vec2(X / other, Y / other);
         }
 
-        Vec2& operator/=(const float& r)
+        Vec2& operator/=(const float& other)
         {
-            X /= r;
-            Y /= r;
+            *this = *this / other;
             return *this;
         }
 
-        friend Vec2 operator/(Vec2 l, const float& r)
+        bool operator==(const Vec2& other)
         {
-            l /= r;
-            return l;
+            return X == other.X && Y == other.Y;
         }
 
-        friend bool operator==(const Vec2& l, const Vec2& r)
+        bool operator!=(const Vec2& other)
         {
-            return l.X == r.X && l.Y == r.Y;
-        }
-
-        friend bool operator!=(const Vec2& l, const Vec2& r)
-        {
-            return !(l == r);
+            return !(*this == other);
         }
     };
 }

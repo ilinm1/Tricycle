@@ -1,7 +1,6 @@
 #pragma once
 
-#define STRINGIFY_(x) #x
-#define STRINGIFY(x) STRINGIFY_(x)
+#include "tc/misc/macros.hpp"
 
 const static char* VertexShaderSource =
     "#version 430 core\n"
