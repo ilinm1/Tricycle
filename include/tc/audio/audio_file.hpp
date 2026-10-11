@@ -13,7 +13,8 @@ namespace Tc::Audio
 	};
 
 	//represents an audio file; can be either buffered or streamed
-	//buffered files can be copied using 'MakeBufferedFileCopy' to play the same sound
+	//buffered files can be freely copied, while streamed ones can not (to avoid synchronising write pointers and seeking between different points in the file)
+	//however keep in mind that once a buffered file is destroyed (either by 'StopFile' or going out of scope) all of it's copies stop working as well
 	struct AudioFile
 	{
 		std::filesystem::path Path;
