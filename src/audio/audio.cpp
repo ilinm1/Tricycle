@@ -434,7 +434,8 @@ void Tca::StopFile(AudioFile* filePtr, bool free)
     AudioFileOpLock.lock();
 
     RemoveStream(&filePtr->LeftChannelStream, true);
-    RemoveStream(&filePtr->RightChannelStream, false);
+    if (StereoEnabled)
+        RemoveStream(&filePtr->RightChannelStream, false);
     AudioFiles.erase(std::find(AudioFiles.begin(), AudioFiles.end(), filePtr));
     filePtr->Playing = false;
 
