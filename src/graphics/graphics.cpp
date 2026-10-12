@@ -24,70 +24,6 @@
 
 namespace Tcg = Tc::Graphics;
 
-//callbacks
-
-void GlfwErrorCallback(int code, const char* desc)
-{
-    Tc::Log(std::format("GLFW error {} - '{}'", code, desc));
-}
-
-void GLAPIENTRY GlMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* param)
-{
-    std::string severityStr;
-    switch (severity)
-    {
-    case GL_DEBUG_SEVERITY_HIGH:
-        severityStr = "high severity";
-        break;
-    case GL_DEBUG_SEVERITY_MEDIUM:
-        severityStr = "medium severity";
-        break;
-    case GL_DEBUG_SEVERITY_LOW:
-        severityStr = "low severity";
-        break;
-    case GL_DEBUG_SEVERITY_NOTIFICATION:
-        severityStr = "notification";
-        break;
-    default:
-        severityStr = "unknown";
-        break;
-    }
-
-    Tc::Log(std::format("GL debug - {}: '{}'", severityStr, message));
-}
-
-void GlfwFramebufferSizeCallback(GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
-    Tcg::UpdateNDCToPixelMatrix(width, height);
-    Tcg::WindowResizeEvent ev = { width, height };
-    Tc::Invoke<Tcg::WindowResizeEvent>(ev);
-}
-
-void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    Tcg::KeyPressEvent ev = { key, scancode, action, mods };
-    Tc::Invoke<Tcg::KeyPressEvent>(ev);
-}
-
-void GlfwCharCallback(GLFWwindow* window, unsigned int codepoint)
-{
-    Tcg::CharacterEvent ev = { .Codepoint = codepoint };
-    Tc::Invoke<Tcg::CharacterEvent>(ev);
-}
-
-void GlfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
-{
-    Tcg::MousePressEvent ev = { button, action, mods };
-    Tc::Invoke<Tcg::MousePressEvent>(ev);
-}
-
-void GlfwScrollCallback(GLFWwindow* window, double offsetX, double offsetY)
-{
-    Tcg::ScrollEvent ev = { offsetX, offsetY };
-    Tc::Invoke<Tcg::ScrollEvent>(ev);
-}
-
 //window methods
 
 void Tcg::SetWindowName(std::string name)
@@ -118,7 +54,7 @@ void Tcg::SetWindowFullscreen(bool fullscreen)
 
 //input methods
 
-//returns vector containg cursor position IN PIXELS
+//returns cursor position IN PIXELS
 //to get cursor position in NDC/in-world coordinates use 'PointFromPixels'
 Tc::Vec2 Tcg::GetCursorPos()
 {
@@ -127,13 +63,13 @@ Tc::Vec2 Tcg::GetCursorPos()
     return Vec2(static_cast<float>(cx), static_cast<float>(cy));
 }
 
-//returns true if key's last reported state is 'GLFW_PRESS'
-//key is one of GLFW's key IDs
+//'key' is one of GLFW's key IDs
 bool Tcg::IsKeyPressed(int key)
 {
     return glfwGetKey(Window, key) == GLFW_PRESS;
 }
 
+//'button' is one of GLFW's button IDs
 bool Tcg::IsMouseButtonPressed(int button)
 {
     return glfwGetMouseButton(Window, button) == GLFW_PRESS;
@@ -146,6 +82,58 @@ std::string Tcg::GetClipboardContents()
         return "";
     return std::string(ptr);
 }
+
+//opens a file picker window with the title 'title'
+//if the purpose of the picker is to select the file for writing then 'write' may be set, in which case various additional settings will be applied (ovewrite warnings, ignoring readonly files, etc.)
+//if user has chosen a valid file then method will return true and set 'path' reference to the path of the selected file
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#include <commdlg.h>
+bool Tcg::OpenFilePicker(std::string title, bool write, std::filesystem::path& path)
+{
+    std::filesystem::path result;
+    std::string pathStr = std::string(256, 0);
+
+    //https://learn.microsoft.com/en-us/windows/win32/api/commdlg/ns-commdlg-openfilenamea
+    OPENFILENAMEA schizoStruct = {
+        sizeof(OPENFILENAMEA),
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        0,
+        1,
+        pathStr.data(),
+        pathStr.capacity(),
+        nullptr,
+        0,
+        nullptr,
+        title.c_str(),
+        OFN_FILEMUSTEXIST | (write ? OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN : 0),
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        nullptr
+    };
+
+    GetOpenFileNameA(&schizoStruct);
+    result = std::filesystem::path(pathStr);
+    if (std::filesystem::exists(result)) //'exists' should be unnecessary here but I've left it just in case
+    {
+        path = result;
+        return true;
+    }
+    return false;
+}
+#else
+std::filesystem::path OpenFilePicker(std::string title, bool write, std::filesystem::path& path)
+{
+    throw std::runtime_error("Not implemented for your OS.");
+}
+#endif
 
 //layer methods
 
@@ -210,79 +198,26 @@ bool Tcg::IsLayerOutOfView(Tcg::Layer* layerPtr)
     }
 }
 
-//opens a file picker window with the title 'title'
-//if the purpouse of the picker is to select the file for writing then 'write' may be set
-//in which case various additional settings will be applied (ovewrite warnings, ignoring readonly files, etc.)
-//if user has chosen a valid file then method will return true and set 'path' reference to the path of the selected file
-#ifdef _WIN32
-#define NOMINMAX
-#include <windows.h>
-#include <commdlg.h>
-bool Tcg::OpenFilePicker(std::string title, bool write, std::filesystem::path& path)
-{
-    std::filesystem::path result;
-    std::string pathStr = std::string(256, 0);
-
-    //https://learn.microsoft.com/en-us/windows/win32/api/commdlg/ns-commdlg-openfilenamea
-    OPENFILENAMEA schizoStruct = {
-        sizeof(OPENFILENAMEA),
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        0,
-        1,
-        pathStr.data(),
-        pathStr.capacity(),
-        nullptr,
-        0,
-        nullptr,
-        title.c_str(),
-        OFN_FILEMUSTEXIST | (write ? OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN : 0),
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        nullptr
-    };
-
-    GetOpenFileNameA(&schizoStruct);
-    result = std::filesystem::path(pathStr);
-    if (std::filesystem::exists(result)) //'exists' should be unnecessary here but I've left it just in case
-    {
-        path = result;
-        return true;
-    }
-    return false;
-}
-#else
-std::filesystem::path OpenFilePicker(std::string title, bool write, std::filesystem::path& path)
-{
-    throw std::runtime_error("Not implemented for your OS.");
-}
-#endif
-
 //camera methods
 
 //updates matrix which translates world coordinates to normalized device coordinates, should be called after changing camera parameters
-void Tcg::UpdateWorldToNDCMatrix()
+void UpdateWorldToNDCMatrix()
 {
-    float x = CameraPosition.X;
-    float y = CameraPosition.Y;
-    float w = CameraSize.X * CameraScale / 2.0f;
-    float h = CameraSize.Y * CameraScale / 2.0f;
-    float c = cosf(CameraRotation);
-    float s = sinf(CameraRotation);
+    float x = Tcg::CameraPosition.X;
+    float y = Tcg::CameraPosition.Y;
+    float w = Tcg::CameraSize.X * Tcg::CameraScale / 2.0f;
+    float h = Tcg::CameraSize.Y * Tcg::CameraScale / 2.0f;
+    float c = cosf(Tcg::CameraRotation);
+    float s = sinf(Tcg::CameraRotation);
 
-    WorldToNDCMatrix =
+    Tcg::WorldToNDCMatrix =
     {
         c / w, -s / w, (y * s - x * c) / w,
         s / h, c / h, (-y * c - x * s) / h,
         0, 0, 0
     };
 
-    NDCToWorldMatrix =
+    Tcg::NDCToWorldMatrix =
     {
         w * c, -h * s, x * c - y * s,
         w * s, h * c, x * s + y * c,
@@ -291,19 +226,19 @@ void Tcg::UpdateWorldToNDCMatrix()
 }
 
 //updates matrix which translates normalized device coordinates to pixels, should be called after changing window size
-void Tcg::UpdateNDCToPixelMatrix(unsigned int width, unsigned int height)
+void UpdateNDCToPixelMatrix(unsigned int width, unsigned int height)
 {
     float w = static_cast<float>(width) / 2.0f;
     float h = static_cast<float>(height) / 2.0f;
 
-    NDCToPixelMatrix =
+    Tcg::NDCToPixelMatrix =
     {
         w, 0, w,
         0, -h, h,
         0, 0, 0
     };
 
-    PixelToNDCMatrix =
+    Tcg::PixelToNDCMatrix =
     {
         1 / w, 0, -1,
         0, -1 / h, 1,
@@ -356,8 +291,7 @@ Tc::Vec2 Tcg::PointFromPixels(Vec2 point, bool inWorld)
     return point;
 }
 
-//unlike 'PointToPixels' doesn't account for camera's position, rotation, different coordinate centers, etc. 
-//only converting the actual dimensions of the object
+//unlike 'PointToPixels' doesn't account for camera's position, rotation, different coordinate centers, etc, only converting the actual dimensions of the object
 Tc::Vec2 Tcg::SizeToPixels(Vec2 size, bool inWorld)
 {
     if (inWorld)
@@ -367,8 +301,7 @@ Tc::Vec2 Tcg::SizeToPixels(Vec2 size, bool inWorld)
     return Vec2(size.X * width, size.Y * height);
 }
 
-//unlike 'PointFromPixels' doesn't account for camera's position, rotation, different coordinate centers, etc. 
-//only converting the actual dimensions of the object
+//unlike 'PointFromPixels' doesn't account for camera's position, rotation, different coordinate centers, etc, only converting the actual dimensions of the object
 Tc::Vec2 Tcg::SizeFromPixels(Vec2 size, bool inWorld)
 {
     auto [width, height] = Tcg::GetWindowSize();
@@ -381,13 +314,6 @@ Tc::Vec2 Tcg::SizeFromPixels(Vec2 size, bool inWorld)
 }
 
 //texture methods
-
-//'GL_NEAREST' - no filtering, 'GL_LINEAR' - linear interpolation
-void Tcg::SetTextureFilter(unsigned int minification, unsigned int magnification)
-{
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minification);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magnification);
-}
 
 Tcg::Texture AddTexture(std::filesystem::path path, Tcg::Rect rect)
 {
@@ -461,7 +387,14 @@ void ResizeAtlas(unsigned int width, unsigned int height)
     }
 }
 
-//loads textures from the specified paths, adding them to atlas
+//'GL_NEAREST' - no filtering, 'GL_LINEAR' - linear interpolation
+void Tcg::SetTextureFilter(unsigned int minification, unsigned int magnification)
+{
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minification);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magnification);
+}
+
+//loads textures from the specified paths
 std::vector<Tcg::Texture> Tcg::LoadTextures(std::vector<std::filesystem::path> paths)
 {
     if (Atlas == 0)
@@ -664,7 +597,7 @@ std::vector<Tcg::Texture> Tcg::LoadTexturesFromPath(std::filesystem::path path)
     return LoadTextures(paths);
 }
 
-//finds texture by path if it's already loaded/loads it if not
+//finds texture by path if it's already loaded or loads it if not
 Tcg::Texture Tcg::ResolveTexture(std::filesystem::path path)
 {
     if (std::filesystem::exists(path))
@@ -680,7 +613,7 @@ Tcg::Texture Tcg::ResolveTexture(std::filesystem::path path)
     return LoadTextures({ path })[0];
 }
 
-//finds font by path if it's already loaded/loads it if not
+//finds font by path if it's already loaded or loads it if not
 Tcg::BitmapFont& Tcg::ResolveFont(std::filesystem::path path)
 {
     if (std::filesystem::exists(path))
@@ -695,14 +628,79 @@ Tcg::BitmapFont& Tcg::ResolveFont(std::filesystem::path path)
     return LoadBdfFont(path);
 }
 
-//writes atlas as a .bmp image (for debugging purpouses)
+//writes atlas as a .bmp image (for debugging purposes)
 void Tcg::SaveAtlas(std::filesystem::path path)
 {
     stbi_flip_vertically_on_write(true);
     stbi_write_bmp(path.string().c_str(), Tcg::AtlasWidth, Tcg::AtlasHeight, 4, Tcg::AtlasData);
 }
 
+//callbacks
+
+void GlfwErrorCallback(int code, const char* desc)
+{
+    Tc::Log(std::format("GLFW error {} - '{}'", code, desc));
+}
+
+void GLAPIENTRY GlMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* param)
+{
+    std::string severityStr;
+    switch (severity)
+    {
+    case GL_DEBUG_SEVERITY_HIGH:
+        severityStr = "high severity";
+        break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+        severityStr = "medium severity";
+        break;
+    case GL_DEBUG_SEVERITY_LOW:
+        severityStr = "low severity";
+        break;
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+        severityStr = "notification";
+        break;
+    default:
+        severityStr = "unknown";
+        break;
+    }
+
+    Tc::Log(std::format("GL debug - {}: '{}'", severityStr, message));
+}
+
+void GlfwFramebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
+    UpdateNDCToPixelMatrix(width, height);
+    Tcg::WindowResizeEvent ev = { width, height };
+    Tc::Invoke<Tcg::WindowResizeEvent>(ev);
+}
+
+void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    Tcg::KeyPressEvent ev = { key, scancode, action, mods };
+    Tc::Invoke<Tcg::KeyPressEvent>(ev);
+}
+
+void GlfwCharCallback(GLFWwindow* window, unsigned int codepoint)
+{
+    Tcg::CharacterEvent ev = { .Codepoint = codepoint };
+    Tc::Invoke<Tcg::CharacterEvent>(ev);
+}
+
+void GlfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+    Tcg::MousePressEvent ev = { button, action, mods };
+    Tc::Invoke<Tcg::MousePressEvent>(ev);
+}
+
+void GlfwScrollCallback(GLFWwindow* window, double offsetX, double offsetY)
+{
+    Tcg::ScrollEvent ev = { offsetX, offsetY };
+    Tc::Invoke<Tcg::ScrollEvent>(ev);
+}
+
 //init, update, shutdown
+//note about thread safety: nothing in 'Tc::Graphics' is thread safe; also 'Initialize', 'UpdateLoop' and 'Terminate' should only be called from the main thread because of how GLFW works
 
 void Tcg::Initialize(int windowWidth, int windowHeight, std::string windowName, bool fullscreen, bool resizable)
 {
