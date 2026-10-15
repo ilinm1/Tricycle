@@ -18,3 +18,18 @@ float Tc::Clamp(float v, float min, float max)
 {
     return std::min(std::max(v, min), max);
 }
+
+//converts the given angle to 0 - 2*PI range
+float Tc::NormalizeAngle(float angle)
+{
+    if (angle < 0.0f)
+        angle += 2.0f * PI;
+
+    return fmodf(angle, 2.0f * PI);
+}
+
+//normalizes and subtracts 'b' from 'a'
+float Tc::SubtractAngles(float a, float b)
+{
+    return NormalizeAngle(a) - NormalizeAngle(b);
+}

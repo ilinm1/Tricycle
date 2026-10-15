@@ -35,13 +35,14 @@ namespace Tc
             return Vec2(cosf(angle), sinf(angle));
         }
 
+        //returns vector's angle in radians; however it is NOT in 0 - 2*PI range, you can use 'NormalizeAngle' to convert it if needed
         float ToAngle()
         {
             if (X == 0.0f)
                 return Y > 0.0f ? PI / 2.0f : PI / -2.0f;
 
             float v = atanf(Y / X);
-            return Y > 0.0f ? v : v + PI;
+            return X > 0.0f ? v : v + PI;
         }
 
         Vec2 Round()
@@ -61,7 +62,7 @@ namespace Tc
 
         Vec2 Rotated(float angle)
         {
-            return Vec2(X * cosf(angle) - Y * sinf(angle), Y * cosf(angle) - X * sinf(angle));
+            return Vec2(X * cosf(angle) - Y * sinf(angle), Y * cosf(angle) + X * sinf(angle));
         }
 
         float Length()
