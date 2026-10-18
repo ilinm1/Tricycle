@@ -880,7 +880,7 @@ void Tcg::UpdateLoop()
             }
             else
             {
-                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, IDENTITY_MATRIX.Cells);
+                glUniformMatrix3fv(UniformNdcMatrix, 1, GL_TRUE, MAT3_IDENTITY.Cells);
             }
 
             //draw call

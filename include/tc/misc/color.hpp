@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-//'Color' class
-
 namespace Tc
 {
     struct Color

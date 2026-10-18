@@ -45,7 +45,7 @@ target_include_directories(
 target_link_libraries(tc_audio portaudio)
 
 #tests
-add_executable(test_runner tests/test.cpp tests/vec2.cpp)
+add_executable(test_runner tests/test.cpp tests/math.cpp)
 target_link_libraries(test_runner tc_graphics tc_audio)
 
 #examples

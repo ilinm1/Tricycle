@@ -4,7 +4,7 @@
 #include <functional>
 #include <stdexcept>
 
-//'Subscription' and 'Subscriber' classes, methods for working with events, input events
+//'Subscription' and 'Subscriber' classes, methods for working with events
 
 namespace Tc
 {

@@ -6,6 +6,9 @@
 #define JOIN(x, y) JOIN_(x, y)
 #define JOIN_(x, y) x ## y
 
+//for passing arrays or generics or other constructions which contain commas as a macro parameter
+#define SINGLE_ARG(...) __VA_ARGS__
+
 //counts amount of variadic arguments (max 16 args)
 #define NARGS_(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, N, ...) N
 #define NARGS(...) NARGS_(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
