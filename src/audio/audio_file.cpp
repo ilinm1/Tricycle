@@ -1,4 +1,5 @@
 #include <stb_vorbis.h>
+#include "tc/audio/audio.hpp"
 #include "tc/audio/audio_file.hpp"
 
 namespace Tca = Tc::Audio;
@@ -76,6 +77,9 @@ Tca::AudioFile::AudioFile(
 
 Tca::AudioFile::~AudioFile()
 {
+	if (Playing)
+		StopFile(this, false);
+
 	if (!Handle)
 		return;
 
@@ -90,7 +94,17 @@ Tca::AudioFile::~AudioFile()
 //copy assignment
 Tca::AudioFile& Tca::AudioFile::operator=(const AudioFile& other)
 {
+	if (!other.Buffered)
+		throw std::runtime_error("It's illegal to create copies of streamed audio files.");
+
 	std::memcpy(this, &other, sizeof(AudioFile));
+
+	Repeat = Playing = false;
+	LeftChannelStream.ReadPtr = LeftChannelStream.Buffer;
+	LeftChannelStream.WritePtr = LeftChannelStream.Buffer + 1;
+	RightChannelStream.ReadPtr = RightChannelStream.Buffer;
+	RightChannelStream.WritePtr = RightChannelStream.Buffer + 1;
+
 	return *this;
 }
 
@@ -98,8 +112,10 @@ Tca::AudioFile& Tca::AudioFile::operator=(const AudioFile& other)
 Tca::AudioFile& Tca::AudioFile::operator=(AudioFile&& other) noexcept
 {
 	std::memcpy(this, &other, sizeof(AudioFile));
+
 	other.Handle = nullptr;
 	other.LeftChannelStream.Buffer = nullptr;
 	other.RightChannelStream.Buffer = nullptr;
+
 	return *this;
 }

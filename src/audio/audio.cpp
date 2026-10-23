@@ -352,7 +352,10 @@ Tca::AudioFile LoadFile_Ogg(std::filesystem::path path, bool buffered)
     result.Buffered = buffered;
 
     if (buffered)
+    {
+        result.Handle = nullptr; //attempting to close the file twice during object's destruction will cause an exception, so it should be set to null
         stb_vorbis_close(vorbisPtr);
+    }
 
     return result;
 }

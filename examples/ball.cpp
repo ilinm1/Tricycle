@@ -62,6 +62,7 @@ struct BallLayer : Tcg::Layer
 
         Tca::SetVolume(&Music, 0.3f);
         Tca::PlayFile(&Music);
+
         Subscribe<Tcg::MousePressEvent>(&OnMousePress);
     }
 
