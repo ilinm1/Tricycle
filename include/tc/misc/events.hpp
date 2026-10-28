@@ -8,10 +8,10 @@
 
 namespace Tc
 {
-    template <class T>
+    template<class T>
     using EventHandler = bool(*)(T&, void*); //accepts event & data, returns whether event has been handled (if it has been then other handlers won't be called)
 
-    template <class T>
+    template<class T>
     struct Subscription
     {
         EventHandler<T> Handler;
@@ -37,7 +37,7 @@ namespace Tc
         }
     };
 
-    template <class T>
+    template<class T>
     struct std::hash<Tc::Subscription<T>>
     {
         std::size_t operator()(const Tc::Subscription<T>& sub) const noexcept
@@ -46,12 +46,12 @@ namespace Tc
         }
     };
 
-    template <class T>
+    template<class T>
     using SubscriptionSet = std::set<Subscription<T>, std::greater<Subscription<T>>>;
 
     //sub/unsub methods
 
-    template <class T>
+    template<class T>
     SubscriptionSet<T>& GetSubscriptions()
     {
         static SubscriptionSet<T> subs;
@@ -62,7 +62,7 @@ namespace Tc
     //if 'layer' is set an unsubscription handler will be created and called automatically upon layer's destruction, otherwise 'Unsubscribe' should be called manually
     //if 'data' is not null it will be passed to the handler, otherwise 'layer' will be passed instead
     //handlers with higher 'priority' will get called first
-    template <class T>
+    template<class T>
     const Subscription<T>& Subscribe(EventHandler<T> handler, void* data = nullptr, int priority = 0)
     {
         auto pair = GetSubscriptions<T>().insert({ handler, priority, data });
@@ -73,14 +73,14 @@ namespace Tc
         return sub;
     }
 
-    template <class T>
+    template<class T>
     void Unsubscribe(const Subscription<T>& sub)
     {
         GetSubscriptions<T>().erase(sub);
     }
 
     //invokes event T, calling handlers with higher priority first
-    template <class T>
+    template<class T>
     void Invoke(T& event)
     {
         for (Subscription sub : GetSubscriptions<T>())

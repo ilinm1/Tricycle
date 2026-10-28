@@ -4,7 +4,9 @@
 
 #include "tc/misc/color.hpp"
 #include "tc/misc/events.hpp"
+#include "tc/misc/json.hpp"
 #include "tc/misc/macros.hpp"
 #include "tc/misc/mat3.hpp"
 #include "tc/misc/misc.hpp"
+#include "tc/misc/serializer.hpp"
 #include "tc/misc/vec2.hpp"
